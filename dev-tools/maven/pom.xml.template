@@ -456,5 +456,24 @@
         </plugins>
       </build>
     </profile>
+    <profile>
+        <id>jdk8+</id>
+        <activation>
+            <jdk>[1.8,)</jdk>
+        </activation>
+        <build>
+            <plugins>
+                <plugin>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <configuration>
+                        <quiet>true</quiet>
+                        <!-- common-build.xml has an equivalent hack,
+                                 java 8 linter is too aggressive -->
+                        <additionalparam>-Xdoclint:none</additionalparam>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </build>
+    </profile>
   </profiles>
 </project>
