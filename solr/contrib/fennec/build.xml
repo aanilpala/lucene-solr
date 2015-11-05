@@ -1,0 +1,61 @@
+<?xml version="1.0"?>
+
+<!--
+    Licensed to the Apache Software Foundation (ASF) under one or more
+    contributor license agreements.  See the NOTICE file distributed with
+    this work for additional information regarding copyright ownership.
+    The ASF licenses this file to You under the Apache License, Version 2.0
+    the "License"); you may not use this file except in compliance with
+    the License.  You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+ -->
+
+<project name="fennec" default="default" xmlns:ivy="antlib:org.apache.ivy.ant">
+
+  <description>
+    Bloomberg news fennec distributed document frequency store
+  </description>
+
+	<import file="../contrib-build.xml"/>
+
+    <property name="test.lib.dir" location="test-lib"/>
+
+    <solr-contrib-uptodate name="extraction"
+                           property="solr-extraction.uptodate"
+                           classpath.property="solr-cell.jar"/>
+
+    <target name="compile-solr-extraction" unless="solr-extraction.uptodate">
+        <ant dir="${common-solr.dir}/contrib/extraction" target="compile-core" inheritAll="false">
+            <propertyset refid="uptodate.and.compiled.properties"/>
+        </ant>
+    </target>
+
+    <target name="resolve-extraction-libs">
+        <ant dir="${common-solr.dir}/contrib/extraction" target="resolve" inheritAll="false">
+            <propertyset refid="uptodate.and.compiled.properties"/>
+        </ant>
+    </target>
+
+    <path id="classpath">
+        <fileset dir="${common-solr.dir}/contrib/extraction/lib" excludes="${common.classpath.excludes}"/>
+        <path refid="solr.base.classpath"/>
+    </path>
+
+    <path id="test.classpath">
+        <path refid="solr.test.base.classpath"/>
+        <fileset dir="${common-solr.dir}/contrib/fennec/lib" excludes="${common.classpath.excludes}"/>
+        <fileset dir="${common-solr.dir}/contrib/extraction/lib" excludes="${common.classpath.excludes}"/>
+        <pathelement location="${common-solr.dir}/build/contrib/fennec/src/test"/>
+        <fileset dir="${test.lib.dir}" includes="*.jar"/>
+    </path>
+
+    <target name="compile-core" depends="resolve-extraction-libs, compile-solr-extraction, solr-contrib-build.compile-core"/>
+    <target name="dist" depends="common-solr.dist"/>
+</project>
