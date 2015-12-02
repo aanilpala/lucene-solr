@@ -3,14 +3,18 @@ import com.yammer.metrics.Metrics;
 import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.common.SolrInputDocument;
-import org.junit.*;
+import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static junit.framework.TestCase.assertEquals;
 
@@ -79,8 +83,8 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
 
     @After
     public void cleanup() throws Exception {
-        MockKafkaProducer.getProducer().shutdown();
         h.getCoreContainer().shutdown();
+        MockDocumentFrequencyUpdateEventListener.cleanup();
         Metrics.shutdown();
     }
 
@@ -97,7 +101,7 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
         add(getDocument());
         commit();
 
-        HashMap<String, List<DocumentFrequencyUpdate>> updates = MockKafkaProducer.getProducer().getLastUpdate();
+        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
         assertEquals(3, updates.keySet().size());
         for (String key : updates.keySet()) {
             for (DocumentFrequencyUpdate update : updates.get(key)) {
@@ -115,7 +119,7 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
         doc.setField("name", "John");
         add(doc);
         commit();
-        HashMap<String, List<DocumentFrequencyUpdate>> updates = MockKafkaProducer.getProducer().getLastUpdate();
+        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
 
         assertEquals(updates.keySet().size(), 3);
         for (String key : updates.keySet()) {
@@ -140,7 +144,7 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
         }
 
         commit();
-        HashMap<String, List<DocumentFrequencyUpdate>> updates = MockKafkaProducer.getProducer().getLastUpdate();
+        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
 
         assertEquals(3, updates.keySet().size());
         assertEquals(10000, updates.get("id").size());
@@ -150,14 +154,14 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
         deleteByQuery("id:5");
         commit();
         //Not merged
-        updates = MockKafkaProducer.getProducer().getLastUpdate();
+        updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
         assertEquals(3, updates.keySet().size());
         assertEquals(0, updates.get("id").size());
         assertEquals(0, updates.get("text").size());
 
         deleteByQuery("*:*");
         commit();
-        updates = MockKafkaProducer.getProducer().getLastUpdate();
+        updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
         assertEquals(3, updates.keySet().size());
         assertEquals(10000, updates.get("id").size());
         assertEquals(1, updates.get("text").size());
@@ -174,7 +178,7 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
         }
 
         commit();
-        HashMap<String, List<DocumentFrequencyUpdate>> updates = MockKafkaProducer.getProducer().getLastUpdate();
+        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
 
         assertEquals(3, updates.keySet().size());
         assertEquals(10000, updates.get("id").size());
@@ -186,7 +190,7 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
             add(doc);
         }
         commit();
-        updates = MockKafkaProducer.getProducer().getLastUpdate();
+        updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
         assertEquals(3, updates.keySet().size());
         assertEquals(10, updates.get("id").size());
         assertEquals(1, updates.get("text").size());
@@ -208,7 +212,7 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
         }
 
         commit();
-        HashMap<String, List<DocumentFrequencyUpdate>> updates = MockKafkaProducer.getProducer().getLastUpdate();
+        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
 
         assertEquals(3, updates.keySet().size());
         assertEquals(580, updates.get("id").size());
@@ -218,14 +222,14 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
         deleteByQuery("id:5");
         commit();
         // Not merged yet and we cannot force a merge from here
-        updates = MockKafkaProducer.getProducer().getLastUpdate();
+        updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
         assertEquals(3, updates.keySet().size());
         assertEquals(0, updates.get("id").size());
         assertEquals(0, updates.get("name").size());
 
         deleteByQuery("*:*");
         commit();
-        updates = MockKafkaProducer.getProducer().getLastUpdate();
+        updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
         assertEquals(3, updates.keySet().size());
         assertEquals(580, updates.get("id").size());
         assertEquals(580, updates.get("text").size());
@@ -244,7 +248,7 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
             add(doc);
         }
         commit();
-        HashMap<String, List<DocumentFrequencyUpdate>> updates = MockKafkaProducer.getProducer().getLastUpdate();
+        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
 
         assertEquals(3, updates.keySet().size());
         assertEquals(50, updates.get("id").size());
@@ -259,7 +263,7 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
             add(doc);
         }
         commit();
-        updates = MockKafkaProducer.getProducer().getLastUpdate();
+        updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
 
         // Not merged, so still 3 but name docFreq didn't change. Instead we have ids changed, and text changed
         assertEquals(3, updates.keySet().size());
@@ -277,10 +281,10 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
             add(doc);
         }
         commit();
-        HashMap<String, List<DocumentFrequencyUpdate>> earlierUpdate= MockKafkaProducer.getProducer().getLastUpdate();
+        Map<String, List<DocumentFrequencyUpdate>> earlierUpdate= MockDocumentFrequencyUpdateEventListener.getLastUpdate();
 
         commit();
-        HashMap<String, List<DocumentFrequencyUpdate>> updates = MockKafkaProducer.getProducer().getLastUpdate();
+        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
 
         // It seems that empty commits do not create a new
         for (String key : earlierUpdate.keySet()) {

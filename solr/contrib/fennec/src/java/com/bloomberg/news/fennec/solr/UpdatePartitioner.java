@@ -25,11 +25,15 @@ import kafka.utils.VerifiableProperties;
  */
 public class UpdatePartitioner implements Partitioner<String>{
 
+    /**
+     * Constructor needed by Kafka to initialize the partitioner
+     * @param properties Passed in by Kafka when it constructs the producer
+     */
     public UpdatePartitioner(VerifiableProperties properties) {}
 
     @Override
     public int partition(String key, int i) {
-        return (key.hashCode() % i);
+        return (Math.abs(key.hashCode()) % i);
     }
 
 }

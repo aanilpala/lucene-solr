@@ -17,7 +17,13 @@ package com.bloomberg.news.fennec.solr;
  */
 
 import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
-import org.apache.lucene.index.*;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.Fields;
+import org.apache.lucene.index.IndexCommit;
+import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.MultiFields;
+import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.TermsEnum;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,7 +85,7 @@ public class DocumentFrequencyIndexDiffer {
      * @return
      * @throws IOException
      */
-    private static HashMap<String, List<DocumentFrequencyUpdate>> diff (IndexCommit newCommit, IndexCommit oldCommit, long timestamp,
+    private static HashMap<String, List<DocumentFrequencyUpdate>> commitDiff (IndexCommit newCommit, IndexCommit oldCommit, long timestamp,
                                                                         String shardId, String collectionName, Set<String> fieldSet) throws IOException {
 
         log.debug("Diffing two commits new: {} and old: {}", newCommit, oldCommit);
@@ -95,7 +101,9 @@ public class DocumentFrequencyIndexDiffer {
             return diffClearedIndex(newCommit, oldCommit, timestamp, shardId, collectionName, fieldSet);
         }
 
-        // Also ensure that the previous commit is not a commit on an empty index, which is possible
+        // Important, empty commits still register as a commit
+        // Hence, diff needs to check that the previous commit is not an empty commit on an empty index
+        // because that would be the same logic as diffing the very first index commit
         if (oldSearcher.numDocs() == 0) {
             newSearcher.close();
             oldSearcher.close();
@@ -271,10 +279,8 @@ public class DocumentFrequencyIndexDiffer {
         if (earlierCommit== null && laterCommit != null) {
             changeToPost = diffFirstCommit(laterCommit, timestamp, shardId, collectionName, fieldSet);
         } else if (earlierCommit != null && laterCommit != null) {
-            // Important, empty commits still register as a commit
-            // Hence, diff needs to check that the previous commit is not an empty commit on an empty index
-            // because that would be the same logic as diffing the very first index commit
-            changeToPost = diff(laterCommit, earlierCommit, timestamp, shardId, collectionName, fieldSet);
+
+            changeToPost = commitDiff(laterCommit, earlierCommit, timestamp, shardId, collectionName, fieldSet);
         } else {
             changeToPost = new HashMap<>();
         }

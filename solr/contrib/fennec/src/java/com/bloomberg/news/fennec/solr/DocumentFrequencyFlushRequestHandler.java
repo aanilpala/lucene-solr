@@ -35,15 +35,15 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
 /**
  * A solr request handler for triggering a full flush of document frequency updates
- * Very similar to the DocumentFrequencyUpdateEventListener, except that because the event listener is
+ * Very similar to the KafkaDocumentFrequencyUpdateEventListener, except that because the event listener is
  * called by DirectUpdateHandler2 inside of commit, we cannot have it used an endpoint to be called to flush
  */
 public class DocumentFrequencyFlushRequestHandler extends RequestHandlerBase {
@@ -53,7 +53,7 @@ public class DocumentFrequencyFlushRequestHandler extends RequestHandlerBase {
     private static final String COLLECTION_NAME_PARAM = "collectionName";
 
     private CoreContainer coreContainer;
-    private DocumentFrequencyUpdateProducer producer;
+    private KafkaDocumentFrequencyUpdateProducer producer;
     private Set<String> fieldsToDiff;
 
     public DocumentFrequencyFlushRequestHandler() {}
@@ -83,9 +83,9 @@ public class DocumentFrequencyFlushRequestHandler extends RequestHandlerBase {
                 this.fieldsToDiff = null;
             }
 
-            this.producer= new DocumentFrequencyUpdateProducer(propertiesFile);
+            this.producer= new KafkaDocumentFrequencyUpdateProducer(propertiesFile);
         } catch (IOException e) {
-            log.error("Unableld to initialize DocumentFrequencyFlushHandler", e);
+            log.error("Unableld to initialize DocumentFrequencyFlushHandler {}", e);
         }
     }
 
@@ -131,16 +131,15 @@ public class DocumentFrequencyFlushRequestHandler extends RequestHandlerBase {
             collectionName = cloudDescriptor.getCollectionName();
         }
 
-        // Perform the flush only if this is core is not in a solr cloud application or is the leader of the shard
+        // Perform the flush only if this core is not in a solr cloud application or is the leader of the shard
         if (cloudDescriptor == null || cloudDescriptor.isLeader()) {
 
             IndexCommit commit = core.getDeletionPolicy().getLatestCommit();
             long commitGen = commit.getGeneration();
-            // Must save also, even though at this point
+            // Must save also, even though at this point we are only operating on 1 commit
             core.getDeletionPolicy().saveCommitPoint(commitGen);
 
-            HashMap<String, List<DocumentFrequencyUpdate>> updates =
-                    null;
+            Map<String, List<DocumentFrequencyUpdate>> updates = Collections.emptyMap();
             try {
                 updates = DocumentFrequencyIndexDiffer.diffCommits(null, commit, shardId, collectionName, this.fieldsToDiff);
                 core.getDeletionPolicy().releaseCommitPoint(commitGen);

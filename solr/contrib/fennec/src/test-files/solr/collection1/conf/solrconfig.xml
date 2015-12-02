@@ -48,7 +48,7 @@
     </indexConfig>
 
     <updateHandler class="solr.DirectUpdateHandler2">
-        <listener event="postCommit" class="MockUpdateEventListener">
+        <listener event="postCommit" class="MockDocumentFrequencyUpdateEventListener">
         </listener>
     </updateHandler>
 

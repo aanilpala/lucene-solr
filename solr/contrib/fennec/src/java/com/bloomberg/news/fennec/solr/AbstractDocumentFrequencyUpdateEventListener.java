@@ -29,63 +29,81 @@ import org.apache.solr.search.SolrIndexSearcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
+ * Abstract class that performs the logic of the event listener,
+ * but leaves how it is published out up to the implementation class
+ * We decided to have different types of publishers implement this class
+ * instead of passing in a producer as parameter because we decided
+ * the inheritance hierarchy was cleaner than trying to use reflection here.
+ * especially since different publisher/producers might have different
+ * configuration options, eg a Kafka producer needs a bunch of ports/host/brokers
+ * vs a publisher that just uses the slf4j logs doesn't need any specified here
+ *
+ *
  * EventHandler that can be specified in solrconfig.xml to perform diffing after each commit
  * Need to be used in conjunction with the com.bloomberg.news.fennec.solr.DocumentFrequencyUpdateDeletionPolicy
  * or there would be severe performance issues because we will publish all doc freqs each time
  * During the postCommit callback, only the leader of a shard will do any diffing
  */
-public class DocumentFrequencyUpdateEventListener extends AbstractSolrEventListener{
+abstract public class AbstractDocumentFrequencyUpdateEventListener extends AbstractSolrEventListener {
+    private static final Logger log = LoggerFactory.getLogger(AbstractDocumentFrequencyUpdateEventListener.class);
 
-    private static final Logger log = LoggerFactory.getLogger(DocumentFrequencyUpdateEventListener.class);
+    private static final int DEFAULT_DIFF_INTERVAL = 1000;
+
+    // Supply the value in MILISECONDS
+    private static final String DIFF_INTERVAL = "diff.interval";
 
     // Differ doesn't store any state so the fields to diff on are here
-    private Set<String> fieldsToDiff;
-    protected DocumentFrequencyUpdateProducer producer;
-    protected String propertiesFile;
+    protected Set<String> fieldsToDiff;
+    private long lastDiffEpoch;
+    protected int diffInterval;
 
-    /**
-     * Constructor called during solr initialization
-     * @param core
-     * @throws IOException
-     */
-    public DocumentFrequencyUpdateEventListener(SolrCore core) throws IOException {
+    public AbstractDocumentFrequencyUpdateEventListener(SolrCore core) {
         super(core);
+        this.diffInterval = DEFAULT_DIFF_INTERVAL;
+        // Set to 0 because we haven't done a diff yet
+        this.lastDiffEpoch = 0;
+        this.fieldsToDiff = null;
+
     }
 
     @Override
     public void init(NamedList args) {
-        this.propertiesFile = (String) args.get(FennecConstants.PROPERTIES_FILE_KEY);
-        log.info("Initializing Event Listener");
-        try {
-            Properties props = new Properties();
-            props.load(new FileInputStream(this.propertiesFile));
-            String fields = (String) props.get(FennecConstants.FIELDS_KEY);
-            log.info("Event listener configured to diff fields: ", fields);
-            if (fields != null) {
-                this.fieldsToDiff = new HashSet<>();
-                Collections.addAll(this.fieldsToDiff, fields.split(FennecConstants.SEPARATOR));
-            } else {
-                this.fieldsToDiff = null;
-            }
-
-            this.producer= new DocumentFrequencyUpdateProducer(propertiesFile);
-            log.info("Finished initializing event listener");
-        } catch (IOException e) {
-            log.error("Unable to initialize kafka producer");
-            throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, "Unable to initialize Event Listener", e);
+        log.info("Initializing Abstract Event Listener");
+        if (args.get(DIFF_INTERVAL) != null) {
+            this.diffInterval = (int) args.get(DIFF_INTERVAL);
         }
 
+        String fields = (String) args.get(FennecConstants.FIELDS_KEY);
+        log.info("Event listener configured to diff fields: ", fields);
+        if (fields != null) {
+            this.fieldsToDiff = new HashSet<>();
+            Collections.addAll(this.fieldsToDiff, fields.split(FennecConstants.SEPARATOR));
+        }
+        log.info("Finished initializing abstract event listener");
     }
 
     @Override
     public void postCommit() {
         // Method is called within DirectUpdateHandler2's commit method
         // from inside the commitLock critical section
+        // First check has enough time passed since the last diff for it to be worth it to diff right now
+
+        if (System.currentTimeMillis() - this.lastDiffEpoch < this.diffInterval) {
+            log.debug("Not enough time has passed since last diff, with interval {} miliseconds. Skipping..."
+                    , this.diffInterval);
+            return;
+        }
+
         SolrCore core = this.getCore();
         CloudDescriptor cloudDescriptor = core.getCoreDescriptor().getCloudDescriptor();
 
@@ -104,7 +122,7 @@ public class DocumentFrequencyUpdateEventListener extends AbstractSolrEventListe
         if ( cloudDescriptor == null || cloudDescriptor.isLeader()) {
             Map<Long, IndexCommit> commits = core.getDeletionPolicy().getCommits();
             // Now iterate through the commits
-            ArrayList<Long> sortedGenerationNums = new ArrayList<>();
+            List<Long> sortedGenerationNums = new ArrayList<>();
             sortedGenerationNums.addAll(commits.keySet());
             Collections.sort(sortedGenerationNums);
             long newestCommitGen = -1, earlierCommitGen = -1;
@@ -121,7 +139,7 @@ public class DocumentFrequencyUpdateEventListener extends AbstractSolrEventListe
                     HashMap<String, List<DocumentFrequencyUpdate>> updates =
                             DocumentFrequencyIndexDiffer.diffCommits(null, newestCommit, shardId, collectionName, this.fieldsToDiff);
 
-                    this.producer.updateDocumentFrequency(updates);
+                    this.updateDocumentFrequency(updates);
                     core.getDeletionPolicy().releaseCommitPoint(newestCommitGen);
                 } else if (sortedGenerationNums.size() > 1) {
                     newestCommitGen = sortedGenerationNums.get(sortedGenerationNums.size() - 1);
@@ -136,13 +154,15 @@ public class DocumentFrequencyUpdateEventListener extends AbstractSolrEventListe
 
                     HashMap<String, List<DocumentFrequencyUpdate>> updates =
                             DocumentFrequencyIndexDiffer.diffCommits(earlierCommit, newerCommit, shardId, collectionName, this.fieldsToDiff);
-                    this.producer.updateDocumentFrequency(updates);
+
+                    this.updateDocumentFrequency(updates);
 
                     // MUST RELEASE
                     core.getDeletionPolicy().releaseCommitPoint(newestCommitGen);
                     core.getDeletionPolicy().releaseCommitPoint(earlierCommitGen);
                 }
                 log.debug("Listener completed update in {} miliseconds", System.currentTimeMillis() - startTime);
+                this.lastDiffEpoch = System.currentTimeMillis();
             } catch (IOException e) {
                 // We are not allowed to throw exceptions here so will catch this
                 throw new SolrException(SolrException.ErrorCode.SERVICE_UNAVAILABLE, "Error pushing diff to kafka", e);
@@ -163,4 +183,7 @@ public class DocumentFrequencyUpdateEventListener extends AbstractSolrEventListe
     public void newSearcher(SolrIndexSearcher solrIndexSearcher, SolrIndexSearcher solrIndexSearcher1) {
 
     }
+
+    abstract protected void updateDocumentFrequency(Map<String, List<DocumentFrequencyUpdate>> updates);
+
 }
