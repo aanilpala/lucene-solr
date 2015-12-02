@@ -1,5 +1,5 @@
 import com.bloomberg.news.fennec.solr.DocumentFrequencyUpdateProducer;
-import com.bloomberg.news.fennec.util.DocumentFrequencyUpdate;
+import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
 
 import java.util.HashMap;
 import java.util.List;

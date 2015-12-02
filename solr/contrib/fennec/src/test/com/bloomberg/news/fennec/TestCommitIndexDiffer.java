@@ -1,4 +1,5 @@
-import com.bloomberg.news.fennec.util.DocumentFrequencyUpdate;
+import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
+import com.yammer.metrics.Metrics;
 import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.common.SolrInputDocument;
@@ -10,6 +11,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.List;
+
+import static junit.framework.TestCase.assertEquals;
 
 // Class will test the solr to kafka side of the system
 public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
@@ -71,14 +74,14 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        initCore("solrconfig.xml", "schema.xml");
+        initCore("./solr/collection1/conf/solrconfig.xml", "./solr/collection1/conf/schema.xml");
     }
 
-    @Override
     @After
-    public void tearDown() throws Exception {
+    public void cleanup() throws Exception {
         MockKafkaProducer.getProducer().shutdown();
-        super.tearDown();
+        h.getCoreContainer().shutdown();
+        Metrics.shutdown();
     }
 
     public void clearIndex() {
@@ -194,7 +197,7 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
     public void testDeleteByQueryLargeDictionary() throws IOException, SolrServerException {
         clearIndex();
         BufferedReader reader =
-                new BufferedReader(new InputStreamReader(new FileInputStream("src/test/test-files/lotsOfWords.txt")));
+                new BufferedReader(new InputStreamReader(new FileInputStream(getFile("lotsOfWords.txt"))));
         String[] content = reader.readLine().split(" ");
         SolrInputDocument doc = getDocument();
 

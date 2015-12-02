@@ -17,12 +17,15 @@ package com.bloomberg.news.fennec.solr;
  */
 
 import kafka.producer.Partitioner;
+import kafka.utils.VerifiableProperties;
 
 /**
  * Partitioner used by the Kafka Producer to guarantee updates for the same (term field) pairs are sent
  * to the same partition for the topic
  */
 public class UpdatePartitioner implements Partitioner<String>{
+
+    public UpdatePartitioner(VerifiableProperties properties) {}
 
     @Override
     public int partition(String key, int i) {

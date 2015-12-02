@@ -135,12 +135,12 @@ public class DocumentFrequencyIndexDiffer {
                 // Old term changed or New term added
                 if ( (oldTermFound && oldTermEnum.docFreq() != docFreq ) ||
                         !oldTermFound) {
-                        // Store the change in docFreq
-                        DocumentFrequencyUpdate update = new DocumentFrequencyUpdate(fieldName,
-                                newTermEnum.term().utf8ToString(), collectionName, shardId, timestamp, newTermEnum.docFreq(),
-                                numDocs);
+                    // Store the change in docFreq
+                    DocumentFrequencyUpdate update = new DocumentFrequencyUpdate(fieldName,
+                            newTermEnum.term().utf8ToString(), collectionName, shardId, timestamp, newTermEnum.docFreq(),
+                            numDocs);
 
-                        updateList.add(update);
+                    updateList.add(update);
                 }
             }
 
@@ -279,7 +279,7 @@ public class DocumentFrequencyIndexDiffer {
             changeToPost = new HashMap<>();
         }
 
-        log.debug("Differ produced diffs for {} fields stored completed in {} miliseconds", fieldSet.size()
+        log.debug("Differ produced diffs for {} fields stored completed in {} miliseconds", fieldSet == null ? "all" : fieldSet.size()
                 , System.currentTimeMillis() - timestamp);
         return changeToPost;
     }

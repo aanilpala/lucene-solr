@@ -63,7 +63,7 @@ public class DocumentFrequencyUpdateProducer {
         Properties props = new Properties();
         props.put("metadata.broker.list", "sundev9.dev.bloomberg.com:9092");
         props.put("serializer.class", "kafka.serializer.StringEncoder");
-        props.put("partitioner.class", "com.bloomberg.news.fennec.com.bloomberg.news.fennec.solr.UpdatePartitioner");
+        props.put("partitioner.class", "com.bloomberg.news.fennec.solr.UpdatePartitioner");
         props.put("request.required.acks", "1");
 
         // This will handle concurrent sending and compression for us.
