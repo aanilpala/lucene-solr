@@ -22,10 +22,11 @@ import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
 import kafka.javaapi.producer.Producer;
 import kafka.producer.KeyedMessage;
 import kafka.producer.ProducerConfig;
+import org.apache.solr.common.SolrException;
+import org.apache.solr.common.util.NamedList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -36,19 +37,28 @@ import java.util.Properties;
  */
 public class KafkaDocumentFrequencyUpdateProducer {
     private static final Logger log = LoggerFactory.getLogger(KafkaDocumentFrequencyUpdateProducer.class);
+    private static final String[] PRODUCER_CONFIGS = {"metadata.broker.list","serializer.class",
+                "partitioner.class", "request.required.acks", "producer.type" };
 
     private Producer<String, String> kafkaProducer;
 
     /**
      * Constructor allowing a custom properties file
-     * @param propertiesFile
      * @throws IOException
      */
-    public KafkaDocumentFrequencyUpdateProducer(String propertiesFile) throws IOException {
-        log.info(String.format("Initializing Kafka Producer with %s as properties", propertiesFile));
+    public KafkaDocumentFrequencyUpdateProducer(NamedList args) throws IOException {
+        log.info(String.format("Initializing Kafka Producer with properties from solrconfig"));
         Properties properties = new Properties();
-        properties.load(new FileInputStream(propertiesFile));
 
+        for (String key : PRODUCER_CONFIGS) {
+            String value = (String) args.get(key);
+            if (value == null) {
+                log.error("Required kafka config {} is missing", key);
+                throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, "Required kafka key " + key + " is missing from solrconfig.xml");
+            }
+            properties.put(key, value);
+        }
+        log.info("Kafka producer properties read in: {}", properties.toString());
         ProducerConfig config = new ProducerConfig(properties);
         this.kafkaProducer = new Producer<>(config);
         log.info("Producer successfully initialized");

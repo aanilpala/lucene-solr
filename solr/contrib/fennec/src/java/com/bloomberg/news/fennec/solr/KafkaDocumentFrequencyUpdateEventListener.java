@@ -18,14 +18,12 @@ package com.bloomberg.news.fennec.solr;
  */
 
 import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
-import com.bloomberg.news.fennec.common.FennecConstants;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.SolrCore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.*;
 
@@ -38,7 +36,6 @@ public class KafkaDocumentFrequencyUpdateEventListener extends AbstractDocumentF
 
     // Differ doesn't store any state so the fields to diff on are here
     protected KafkaDocumentFrequencyUpdateProducer producer;
-    protected String propertiesFile;
 
     /**
      * Constructor called during solr initialization
@@ -54,10 +51,7 @@ public class KafkaDocumentFrequencyUpdateEventListener extends AbstractDocumentF
         super.init(args);
         log.info("Initializing Kafka Event Listener");
         try {
-            Properties props = new Properties();
-            this.propertiesFile = (String) args.get(FennecConstants.PROPERTIES_FILE_KEY);
-            props.load(new FileInputStream(this.propertiesFile));
-            this.producer= new KafkaDocumentFrequencyUpdateProducer(propertiesFile);
+            this.producer= new KafkaDocumentFrequencyUpdateProducer(args);
             log.info("Finished initializing kafka event listener");
         } catch (IOException e) {
             log.error("Unable to initialize kafka producer");

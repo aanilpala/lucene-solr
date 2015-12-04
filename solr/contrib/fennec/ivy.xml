@@ -24,7 +24,5 @@
         <dependency org="com.bloomberg.news" name="fennec-common" rev="1.0.0">
             <artifact name="fennec-common" ext="jar"/>
         </dependency>
-
-
     </dependencies>
 </ivy-module>

@@ -72,18 +72,8 @@ public class DocumentFrequencyFlushRequestHandler extends RequestHandlerBase {
         log.info("Initializing DocumentFrequencyFlushRequestHandler");
 
         try {
-            Properties props = new Properties();
-            props.load(new FileInputStream(propertiesFile));
-            String fields = (String) props.get(FennecConstants.FIELDS_KEY);
-            log.info("Event listener configured to diff fields: ", fields);
-            if (fields != null) {
-                this.fieldsToDiff = new HashSet<>();
-                Collections.addAll(this.fieldsToDiff, fields.split(FennecConstants.SEPARATOR));
-            } else {
-                this.fieldsToDiff = null;
-            }
-
-            this.producer= new KafkaDocumentFrequencyUpdateProducer(propertiesFile);
+            this.producer= new KafkaDocumentFrequencyUpdateProducer(args);
+            log.info("Successfully initialized flush request handler");
         } catch (IOException e) {
             log.error("Unableld to initialize DocumentFrequencyFlushHandler {}", e);
         }
