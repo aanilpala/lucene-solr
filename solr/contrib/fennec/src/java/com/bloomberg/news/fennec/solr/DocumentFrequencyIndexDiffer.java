@@ -29,8 +29,10 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -41,7 +43,7 @@ public class DocumentFrequencyIndexDiffer {
     private static final Logger log = LoggerFactory.getLogger(DocumentFrequencyIndexDiffer.class);
 
     // The new commit shows no records at all, and has no fields
-    private static HashMap<String, List<DocumentFrequencyUpdate>> diffClearedIndex(IndexCommit newCommit, IndexCommit oldCommit,
+    private static Map<String, List<DocumentFrequencyUpdate>> diffClearedIndex(IndexCommit newCommit, IndexCommit oldCommit,
                                                                                    long timestamp, String shardId,
                                                                                    String collectionName,
                                                                                    Set<String> fieldSet) throws IOException {
@@ -85,7 +87,7 @@ public class DocumentFrequencyIndexDiffer {
      * @return
      * @throws IOException
      */
-    private static HashMap<String, List<DocumentFrequencyUpdate>> commitDiff (IndexCommit newCommit, IndexCommit oldCommit, long timestamp,
+    private static Map<String, List<DocumentFrequencyUpdate>> commitDiff (IndexCommit newCommit, IndexCommit oldCommit, long timestamp,
                                                                         String shardId, String collectionName, Set<String> fieldSet) throws IOException {
 
         log.debug("Diffing two commits new: {} and old: {}", newCommit, oldCommit);
@@ -218,7 +220,7 @@ public class DocumentFrequencyIndexDiffer {
     }
 
     // Used when there is only 1 commit in the commit list
-    private static HashMap<String, List<DocumentFrequencyUpdate>> diffFirstCommit(IndexCommit commit, long timestamp,
+    private static Map<String, List<DocumentFrequencyUpdate>> diffFirstCommit(IndexCommit commit, long timestamp,
                                                                                   String shardId,
                                                                                   String collectionName,
                                                                                   Set<String> fieldSet) throws IOException {
@@ -268,21 +270,20 @@ public class DocumentFrequencyIndexDiffer {
      * @return                  A map of Fields -> list of updates for that field
      * @throws IOException
      */
-    public static HashMap<String, List<DocumentFrequencyUpdate>> diffCommits(IndexCommit earlierCommit,
+    public static Map<String, List<DocumentFrequencyUpdate>> diffCommits(IndexCommit earlierCommit,
                                                                              IndexCommit laterCommit, String shardId,
                                                                              String collectionName,
                                                                              Set<String> fieldSet) throws IOException {
         long timestamp = System.currentTimeMillis();
 
-        HashMap<String , List<DocumentFrequencyUpdate>> changeToPost;
+        Map<String , List<DocumentFrequencyUpdate>> changeToPost;
         // We get the commit data here
         if (earlierCommit== null && laterCommit != null) {
             changeToPost = diffFirstCommit(laterCommit, timestamp, shardId, collectionName, fieldSet);
         } else if (earlierCommit != null && laterCommit != null) {
-
             changeToPost = commitDiff(laterCommit, earlierCommit, timestamp, shardId, collectionName, fieldSet);
         } else {
-            changeToPost = new HashMap<>();
+            changeToPost = (HashMap<String, List<DocumentFrequencyUpdate>>) Collections.<String, List<DocumentFrequencyUpdate>>emptyMap();
         }
 
         log.debug("Differ produced diffs for {} fields stored completed in {} miliseconds", fieldSet == null ? "all" : fieldSet.size()
