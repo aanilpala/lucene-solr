@@ -40,6 +40,10 @@ Bug Fixes
   stop words following a span can unduly make the fragment way too long.
   (Elmer Garduno, Lukhnos Liu via David Smiley)
 
+* LUCENE-6907: make TestParser extendable, rename test/.../xml/
+  NumericRangeQueryQuery.xml to NumericRangeQuery.xml
+  (Christine Poerschke)
+
 ======================= Lucene 5.4.0 =======================
 
 New Features
