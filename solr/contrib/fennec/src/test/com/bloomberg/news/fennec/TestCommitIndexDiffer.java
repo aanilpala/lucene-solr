@@ -1,3 +1,5 @@
+package com.bloomberg.news.fennec;
+
 import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
 import com.yammer.metrics.Metrics;
 import org.apache.solr.SolrTestCaseJ4;
