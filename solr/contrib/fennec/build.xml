@@ -39,7 +39,7 @@
         <fileset dir="${test.lib.dir}" includes="*.jar"/>
     </path>
 
-    <target name="fetch-test-libs" depends="ivy-availability-check,ivy-fail,ivy-configure">
+    <target name="resolve" depends="ivy-availability-check,ivy-fail,ivy-configure">
         <sequential>
             <ivy:retrieve type="jar,bundle,test" sync="${ivy.sync}" log="download-only"
                 pattern="${test.lib.dir}/[artifact]-[revision](-[classifier]).[ext]"/>
@@ -47,6 +47,6 @@
     </target>
 
     <target name="compile-core" depends="solr-contrib-build.compile-core"/>
-    <target name="compile-test" depends="fetch-test-libs,-compile-analysis-extras,common-solr.compile-test"/>
+    <target name="compile-test" depends="-compile-analysis-extras,common-solr.compile-test"/>
     <target name="dist" depends="common-solr.dist"/>
 </project>
