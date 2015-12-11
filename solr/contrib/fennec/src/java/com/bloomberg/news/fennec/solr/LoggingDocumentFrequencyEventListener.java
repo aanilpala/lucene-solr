@@ -19,48 +19,121 @@ package com.bloomberg.news.fennec.solr;
 
 import com.bloomberg.news.fennec.common.DocumentFrequencyKafkaSerializer;
 import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
+
+import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.SolrCore;
-import org.json.simple.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
+import java.util.LinkedList;
 
 /**
  * DocumentFrequency Event listener that does not publish but logs all the updates
  */
 public class LoggingDocumentFrequencyEventListener extends AbstractDocumentFrequencyUpdateEventListener {
+  
+    enum SampleStrategy {
+        INORDER {
+            @Override
+            public List<DocumentFrequencyUpdate> sample(List<DocumentFrequencyUpdate> updates, Integer sampleSize) {
+                if (sampleSize == null) {
+                    return updates;
+                }
+                
+                return updates.subList(0, Math.min(sampleSize, updates.size()));
+            }
+            
+            @Override
+            public String toString() {
+                return "In-Order";
+            }
+        },
+        
+        RANDOM {
+            @Override
+            public List<DocumentFrequencyUpdate> sample(List<DocumentFrequencyUpdate> updates, Integer sampleSize) {
+                Collections.shuffle(updates); // O(updates.size())
+                
+                if (sampleSize == null) {
+                    return updates;
+                }
+                
+                return updates.subList(0, Math.min(sampleSize, updates.size()));
+            }
+            
+            @Override
+            public String toString() {
+                return "Random";
+            }
+        };
+        
+        abstract public List<DocumentFrequencyUpdate> sample(List<DocumentFrequencyUpdate> updates, Integer sampleSize);
+        abstract public String toString();
+    };
 
     private static final Logger log = LoggerFactory.getLogger(LoggingDocumentFrequencyEventListener.class);
+    private static final String SAMPLESIZE_ARG = "sample.size";
+    private static final String SAMPLESTRATEGY_ARG = "sample.strategy";
+    
+    Integer sampleSize; // null sampleSize is full sample
+    SampleStrategy sampleStrategy = SampleStrategy.INORDER;
 
     public LoggingDocumentFrequencyEventListener(SolrCore core) {
         super(core);
     }
+    
+    @Override
+    public void init(NamedList args) {
+        super.init(args);
+        this.sampleSize = (Integer) args.get(SAMPLESIZE_ARG);
+        try {
+            this.sampleStrategy = SampleStrategy.valueOf((String) args.get(SAMPLESTRATEGY_ARG));
+        } catch (Exception e) {
+            log.debug("No/invalid sample strategy specified, falling back to default");
+        }
+        
+        log.info("Sample size={}, strategy={}", sampleSize, sampleStrategy);
+    }
 
     @Override
     protected void updateDocumentFrequency(Map<String, List<DocumentFrequencyUpdate>> updateMap) {
-        int recordCount = 0;
-        JSONObject outputJson = new JSONObject();
-        List<JSONObject> fields = new ArrayList<>();
+        List<Map<String, Object>> fields = new LinkedList<Map<String, Object>>();
+        
+        int totalTermsChanged = 0;
+
         for (String fieldName : updateMap.keySet()) {
-            List<DocumentFrequencyUpdate> updates =  updateMap.get(fieldName);
-            recordCount += updates.size();
-            JSONObject fieldUpdate = new JSONObject();
-            fieldUpdate.put("size", updates.size());
-            fieldUpdate.put("field", fieldName);
-            if (updates.size() > 0) {
-                Collections.shuffle(updates);
-                DocumentFrequencyUpdate update = updates.get(0);
-                String updateData = DocumentFrequencyKafkaSerializer.serialize(update);
-                fieldUpdate.put("sample", updateData);
+            List<DocumentFrequencyUpdate> updates = updateMap.get(fieldName);
+            totalTermsChanged += updates.size();
+
+            Map<String, Object> fieldData = new HashMap<String, Object>(3);
+            fieldData.put("termsChanged", updates.size());
+            fieldData.put("field", fieldName);
+
+            if (! updates.isEmpty()) {
+                List<DocumentFrequencyUpdate> sample = sampleStrategy.sample(updates, sampleSize);
+                fieldData.put("sample", sample);
             }
-            fields.add(fieldUpdate);
+            
+            fields.add(fieldData);
         }
-        outputJson.put("updates", fields);
-        outputJson.put("total", recordCount);
-        log.info("Publishing Updates: {}", outputJson.toJSONString());
+        
+        Map<String, Object> data = new HashMap<String, Object>(2);
+        data.put("fields", fields);
+        data.put("totalTermsChanged", totalTermsChanged);
+        
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            log.info("Publishing Updates: {}", mapper.writeValueAsString(data));
+        } catch (JsonProcessingException e) {
+            log.error("Failed to log update: {}", e);
+        }
     }
 }

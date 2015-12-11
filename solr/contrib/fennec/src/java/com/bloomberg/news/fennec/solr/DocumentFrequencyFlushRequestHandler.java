@@ -18,12 +18,11 @@ package com.bloomberg.news.fennec.solr;
 
 import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
 import com.bloomberg.news.fennec.common.FennecConstants;
-import org.apache.commons.lang.StringUtils;
+
 import org.apache.lucene.index.IndexCommit;
 import org.apache.solr.cloud.CloudDescriptor;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.NamedList;
-import org.apache.solr.core.CoreContainer;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.handler.RequestHandlerBase;
 import org.apache.solr.request.SolrQueryRequest;
@@ -31,15 +30,14 @@ import org.apache.solr.response.SolrQueryResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.Arrays;
 
 /**
  * A solr request handler for triggering a full flush of document frequency updates
@@ -50,16 +48,11 @@ public class DocumentFrequencyFlushRequestHandler extends RequestHandlerBase {
 
     private static final Logger log = LoggerFactory.getLogger(DocumentFrequencyFlushRequestHandler.class);
 
-    private static final String COLLECTION_NAME_PARAM = "collectionName";
-
-    private CoreContainer coreContainer;
     private KafkaDocumentFrequencyUpdateProducer producer;
     private Set<String> fieldsToDiff;
 
-    public DocumentFrequencyFlushRequestHandler() {}
-
-    public DocumentFrequencyFlushRequestHandler(CoreContainer container) {
-        this.coreContainer = container;
+    public DocumentFrequencyFlushRequestHandler() {
+        super();
     }
 
     /**
@@ -68,10 +61,15 @@ public class DocumentFrequencyFlushRequestHandler extends RequestHandlerBase {
      */
     @Override
     public void init(NamedList args) {
-        String propertiesFile = (String) args.get(FennecConstants.PROPERTIES_FILE_KEY);
         log.info("Initializing DocumentFrequencyFlushRequestHandler");
 
         try {
+            String fields = (String) args.get(FennecConstants.FIELDS_KEY);
+            log.info("Event listener configured to diff fields: {}", fields);
+            if (fields != null) {
+                this.fieldsToDiff = new HashSet<String>(Arrays.asList(fields.split(FennecConstants.SEPARATOR)));
+            }
+            log.info("Flushing configured for fields: {}", fields);
             this.producer= new KafkaDocumentFrequencyUpdateProducer(args);
             log.info("Successfully initialized flush request handler");
         } catch (IOException e) {
@@ -81,26 +79,25 @@ public class DocumentFrequencyFlushRequestHandler extends RequestHandlerBase {
 
     @Override
     public void handleRequestBody(SolrQueryRequest solrQueryRequest, SolrQueryResponse solrQueryResponse) {
-        String collectionName = solrQueryRequest.getParams().get(COLLECTION_NAME_PARAM, StringUtils.EMPTY);
-
-        // The collectionName must be specified, or we will not do anything
-        long startTime = System.currentTimeMillis();
-        List<String> coresFlushed = new ArrayList<>();
-        if (collectionName.isEmpty()) {
-            log.error("Required collectionName parameter missing for flush document frequencies");
-            solrQueryResponse.add("Error", "Missing required parameter collectionName");
-            solrQueryResponse.add("Status", "Error");
+        long startTime = System.nanoTime();
+        final SolrCore core = solrQueryRequest.getCore();
+        
+        if (core == null) {
+            log.warn("No core is associated with the request so cannot flush document frequencies");
+            solrQueryResponse.add("Status", "Failed");
             return;
-        } else {
-            for (SolrCore core : this.coreContainer.getCores()) {
-                if (core.getCoreDescriptor().getCollectionName().equals(collectionName) &&flushCore(core)) {
-                    coresFlushed.add(core.getCoreDescriptor().getName());
-                }
-            }
         }
-        solrQueryResponse.add("Cores", coresFlushed);
-        solrQueryResponse.add("Status", "Completed");
-        log.debug("Flushing cores completed, took {} miliseconds", System.currentTimeMillis() - startTime);
+        
+        if (flushCore(core)) {
+            solrQueryResponse.add("Status", "Completed");
+        }
+        else
+        {
+            solrQueryResponse.add("Status", "Failed");
+        }
+        
+        solrQueryResponse.add("Core", core);
+        log.debug("Flushing cores completed, took {} miliseconds", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime));
     }
 
     /**
@@ -126,6 +123,7 @@ public class DocumentFrequencyFlushRequestHandler extends RequestHandlerBase {
 
             IndexCommit commit = core.getDeletionPolicy().getLatestCommit();
             long commitGen = commit.getGeneration();
+            log.info("flushing core={} commitgen={} commit={} fieldsToDiff={}", core, commitGen, commit, fieldsToDiff);
             // Must save also, even though at this point we are only operating on 1 commit
             core.getDeletionPolicy().saveCommitPoint(commitGen);
 
@@ -145,6 +143,7 @@ public class DocumentFrequencyFlushRequestHandler extends RequestHandlerBase {
             // Update completed
             return true;
         }
+
         // We did nothing
         return false;
     }

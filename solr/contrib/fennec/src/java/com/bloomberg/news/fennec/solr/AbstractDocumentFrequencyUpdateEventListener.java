@@ -170,10 +170,11 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
         if (args.get(DIFF_INTERVAL) != null) {
             this.diffInterval = (int) args.get(DIFF_INTERVAL);
         }
+        log.info("Arguments: {}", args);
 
         String fields = (String) args.get(FennecConstants.FIELDS_KEY);
-        log.info("Event listener configured to diff fields: ", fields);
-        if (fields != null) {
+        log.info("Event listener configured to diff fields: {}", fields);
+        if (fields != null && ! fields.isEmpty()) {
             this.fieldsToDiff = new HashSet<>();
             Collections.addAll(this.fieldsToDiff, fields.split(FennecConstants.SEPARATOR));
         }
