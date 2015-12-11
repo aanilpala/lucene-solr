@@ -57,7 +57,11 @@
       <lib dir="${dist}" excludes="${exclude.from.war},${common.classpath.excludes}">
         <include name="solr-solrj-${version}.jar" />
         <include name="solr-core-${version}.jar" />
+        <include name="solr-fennec-${version}.jar" />
         <include name="solr-ltr-${version}.jar" />
+      </lib>
+      <lib dir="${common-solr.dir}/contrib/fennec/lib" excludes="${exclude.from.war},${common.classpath.excludes}">
+        <exclude name="zookeeper-3.3.4.jar"/> <!-- pulled in with kafka -->
       </lib>
       <fileset dir="${dest}/web" excludes="${exclude.from.war}"/> <!-- contribs' additions -->
       <fileset dir="web" excludes="${exclude.from.war}"/>

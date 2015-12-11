@@ -17,7 +17,7 @@
     limitations under the License.
  -->
 
-<project name="fennec" default="default" xmlns:ivy="antlib:org.apache.ivy.ant">
+<project name="solr-fennec" default="default" xmlns:ivy="antlib:org.apache.ivy.ant">
 
     <description>
         Bloomberg news fennec distributed document frequency store
