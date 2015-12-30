@@ -17,7 +17,7 @@
     limitations under the License.
  -->
 
-<project name="solr-fennec" default="default" xmlns:ivy="antlib:org.apache.ivy.ant">
+<project name="solr-fennec" default="default">
 
     <description>
         Bloomberg news fennec distributed document frequency store
@@ -25,29 +25,4 @@
 
     <import file="../contrib-build.xml"/>
 
-    <property name="test.lib.dir" location="test-lib"/>
-
-    <path id="classpath">
-        <fileset dir="${common-solr.dir}/contrib/fennec/lib" excludes="${common.classpath.excludes}"/>
-        <path refid="solr.base.classpath"/>
-    </path>
-
-    <path id="test.classpath">
-        <path refid="solr.test.base.classpath"/>
-        <fileset dir="${common-solr.dir}/contrib/fennec/lib" excludes="${common.classpath.excludes}"/>
-        <pathelement location="${common-solr.dir}/build/contrib/fennec/src/test"/>
-        <fileset dir="${test.lib.dir}" includes="*.jar"/>
-    </path>
-
-    <target name="resolve" depends="ivy-availability-check,ivy-fail,ivy-configure">
-        <sequential>
-            <ivy:retrieve type="jar,bundle" sync="${ivy.sync}" log="download-only"/>
-            <ivy:retrieve type="jar,bundle,test" sync="${ivy.sync}" log="download-only"
-                pattern="${test.lib.dir}/[artifact]-[revision](-[classifier]).[ext]"/>
-        </sequential>
-    </target>
-
-    <target name="compile-core" depends="solr-contrib-build.compile-core"/>
-    <target name="compile-test" depends="-compile-analysis-extras,common-solr.compile-test"/>
-    <target name="dist" depends="common-solr.dist"/>
 </project>
