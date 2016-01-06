@@ -62,7 +62,7 @@ import java.util.concurrent.TimeUnit;
  */
 abstract public class AbstractDocumentFrequencyUpdateEventListener extends AbstractSolrEventListener {
     private static final Logger log = LoggerFactory.getLogger(AbstractDocumentFrequencyUpdateEventListener.class);
-    private static final int DEFAULT_DIFF_INTERVAL_MS = 1000;
+    private static final int DEFAULT_DIFF_INTERVAL_MS = 30000;
     private static final int DEFAULT_SHUTDOWN_TIME_SECONDS = 1;
 
     private static final String DIFF_INTERVAL_MS = "diff.interval.ms";
@@ -153,7 +153,7 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
                 try {
                     executor.awaitTermination(DEFAULT_SHUTDOWN_TIME_SECONDS, TimeUnit.SECONDS);
                 } catch (InterruptedException e) {
-                    log.warn("Executor failed to shutdown in {} seconds, forcing shutdown" , DEFAULT_DIFF_INTERVAL_MS);
+                    log.warn("Executor failed to shutdown in {} seconds, forcing shutdown" , DEFAULT_SHUTDOWN_TIME_SECONDS);
                     executor.shutdownNow();
                 }
             }
