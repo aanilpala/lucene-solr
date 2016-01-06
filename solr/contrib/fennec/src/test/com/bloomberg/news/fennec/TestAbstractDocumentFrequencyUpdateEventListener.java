@@ -2,9 +2,11 @@ package com.bloomberg.news.fennec;
 
 import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
 import com.yammer.metrics.Metrics;
+
 import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.common.SolrInputDocument;
+import org.apache.solr.common.util.NamedList;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -18,10 +20,10 @@ import java.io.InputStreamReader;
 import java.util.List;
 import java.util.Map;
 
-import static junit.framework.TestCase.assertEquals;
-
 // Class will test the solr to kafka side of the system
-public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
+public class TestAbstractDocumentFrequencyUpdateEventListener extends SolrTestCaseJ4 {
+  
+    RememberingDocumentFrequencyUpdateEventListener updateEventListener;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -49,7 +51,6 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
 
     /**
      * Delete documents by a query
-     * @param query
      */
     private void deleteByQuery(String query) {
         StringBuilder sb = new StringBuilder("<delete><query>");
@@ -59,7 +60,6 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
     }
     /**
      * Construct the document in XML format (for our simple docs with simple fields and values)
-     * @param doc
      */
     private void add(SolrInputDocument doc) {
         StringBuilder sb = new StringBuilder();
@@ -80,13 +80,18 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        initCore("./solr/collection1/conf/solrconfig.xml", "./solr/collection1/conf/schema.xml");
+        initCore("solrconfig.xml", "schema.xml", getFile("fennec/solr").getAbsolutePath());
+        updateEventListener = new RememberingDocumentFrequencyUpdateEventListener(h.getCore());
+        final NamedList args = new NamedList<>();
+        args.add("diff.interval.ms", 0);
+        updateEventListener.init(args);
+        h.getCore().getUpdateHandler().registerCommitCallback(updateEventListener);
     }
 
     @After
     public void cleanup() throws Exception {
         h.getCoreContainer().shutdown();
-        MockDocumentFrequencyUpdateEventListener.cleanup();
+        updateEventListener.cleanup();
         Metrics.shutdown();
     }
 
@@ -103,11 +108,12 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
         add(getDocument());
         commit();
 
-        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
+        Map<String, List<DocumentFrequencyUpdate>> updates = updateEventListener.getLastUpdate();
+        assertNotNull(updates);
         assertEquals(3, updates.keySet().size());
         for (String key : updates.keySet()) {
             for (DocumentFrequencyUpdate update : updates.get(key)) {
-                assertEquals(1, update.docFreq);
+                assertEquals(1, update.getDocumentFrequency());
             }
         }
     }
@@ -121,15 +127,16 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
         doc.setField("name", "John");
         add(doc);
         commit();
-        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
+        Map<String, List<DocumentFrequencyUpdate>> updates = updateEventListener.getLastUpdate();
 
+        assertNotNull(updates);
         assertEquals(updates.keySet().size(), 3);
         for (String key : updates.keySet()) {
             for (DocumentFrequencyUpdate update : updates.get(key)) {
-                if (update.term.equalsIgnoreCase("John")) {
-                    assertEquals(1, update.docFreq);
+                if (update.getTerm().equalsIgnoreCase("John")) {
+                    assertEquals(1, update.getDocumentFrequency());
                 } else {
-                    assertEquals(2, update.docFreq);
+                    assertEquals(2, update.getDocumentFrequency());
                 }
             }
         }
@@ -146,57 +153,70 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
         }
 
         commit();
-        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
+        Map<String, List<DocumentFrequencyUpdate>> updates = updateEventListener.getLastUpdate();
 
+        assertNotNull(updates);
         assertEquals(3, updates.keySet().size());
         assertEquals(10000, updates.get("id").size());
         assertEquals(1, updates.get("name").size());
-        assertEquals(10000, updates.get("name").get(0).docFreq);
+        assertEquals(10000, updates.get("name").get(0).getDocumentFrequency());
+        updateEventListener.cleanup();
 
         deleteByQuery("id:5");
         commit();
         //Not merged
-        updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
+        updates = updateEventListener.getLastUpdate();
+        assertNotNull(updates);
         assertEquals(3, updates.keySet().size());
         assertEquals(0, updates.get("id").size());
         assertEquals(0, updates.get("text").size());
+        updateEventListener.cleanup();
 
         deleteByQuery("*:*");
         commit();
-        updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
+        updates = updateEventListener.getLastUpdate();
+        assertNotNull(updates);
         assertEquals(3, updates.keySet().size());
         assertEquals(10000, updates.get("id").size());
         assertEquals(1, updates.get("text").size());
-        assertEquals(0, updates.get("name").get(0).docFreq);
+        assertEquals(0, updates.get("name").get(0).getDocumentFrequency());
     }
 
     @Test
     public void testStressDeleteDelayedCommit() throws IOException, SolrServerException {
         clearIndex();
-        SolrInputDocument doc=  getDocument();
+        SolrInputDocument doc = getDocument();
         for (int i = 0; i < 10000; i++) {
             doc.setField("id", i);
             add(doc);
         }
-
-        commit();
-        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
-
+        
+        commit();        
+        
+        Map<String, List<DocumentFrequencyUpdate>> updates = updateEventListener.getLastUpdate();
+        
+        assertNotNull(updates);
         assertEquals(3, updates.keySet().size());
         assertEquals(10000, updates.get("id").size());
         assertEquals(1, updates.get("name").size());
-        assertEquals(10000, updates.get("name").get(0).docFreq);
+        assertEquals(10000, updates.get("name").get(0).getDocumentFrequency());
+        updateEventListener.cleanup();
+        
         deleteByQuery("id:5");
+        
         for (int i = 10000; i < 10010; i++) {
             doc.setField("id", i);
             add(doc);
         }
+        
         commit();
-        updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
+        
+        updates = updateEventListener.getLastUpdate();
+        assertNotNull(updates);
         assertEquals(3, updates.keySet().size());
         assertEquals(10, updates.get("id").size());
         assertEquals(1, updates.get("text").size());
-        assertEquals(10010, updates.get("name").get(0).docFreq);
+        assertEquals(10010, updates.get("name").get(0).getDocumentFrequency());
     }
 
     @Test
@@ -205,38 +225,46 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
         BufferedReader reader =
                 new BufferedReader(new InputStreamReader(new FileInputStream(getFile("lotsOfWords.txt"))));
         String[] content = reader.readLine().split(" ");
+        reader.close();
         SolrInputDocument doc = getDocument();
-
+        
         for (int i =0; i < content.length; i++) {
             doc.setField("text", content[i]);
             doc.setField("id", i);
             add(doc);
         }
-
+        
         commit();
-        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
+        
+        Map<String, List<DocumentFrequencyUpdate>> updates = updateEventListener.getLastUpdate();
 
+        assertNotNull(updates);
         assertEquals(3, updates.keySet().size());
         assertEquals(580, updates.get("id").size());
         assertEquals(580, updates.get("text").size());
-        assertEquals(580, updates.get("name").get(0).docFreq);
+        assertEquals(580, updates.get("name").get(0).getDocumentFrequency());
+        updateEventListener.cleanup();
 
         deleteByQuery("id:5");
         commit();
+        
         // Not merged yet and we cannot force a merge from here
-        updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
+        updates = updateEventListener.getLastUpdate();
+        assertNotNull(updates);
         assertEquals(3, updates.keySet().size());
         assertEquals(0, updates.get("id").size());
         assertEquals(0, updates.get("name").size());
+        updateEventListener.cleanup();
 
         deleteByQuery("*:*");
         commit();
-        updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
+        
+        updates = updateEventListener.getLastUpdate();
+        assertNotNull(updates);
         assertEquals(3, updates.keySet().size());
         assertEquals(580, updates.get("id").size());
         assertEquals(580, updates.get("text").size());
-        assertEquals(0, updates.get("name").get(0).docFreq);
-
+        assertEquals(0, updates.get("name").get(0).getDocumentFrequency());
     }
 
     @Test
@@ -250,12 +278,12 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
             add(doc);
         }
         commit();
-        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
+        Map<String, List<DocumentFrequencyUpdate>> updates = updateEventListener.getLastUpdate();
 
         assertEquals(3, updates.keySet().size());
         assertEquals(50, updates.get("id").size());
         assertEquals(1, updates.get("text").size());
-        assertEquals(50, updates.get("name").get(0).docFreq);
+        assertEquals(50, updates.get("name").get(0).getDocumentFrequency());
 
         clearIndex();
         doc.removeField("text");
@@ -265,12 +293,12 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
             add(doc);
         }
         commit();
-        updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
+        updates = updateEventListener.getLastUpdate();
 
-        // Not merged, so still 3 but name docFreq didn't change. Instead we have ids changed, and text changed
+        // Not merged, so still 3 but name getDocumentFrequency() didn't change. Instead we have ids changed, and text changed
         assertEquals(3, updates.keySet().size());
         assertEquals(100, updates.get("id").size());
-        assertEquals(0, updates.get("text").get(0).docFreq);
+        assertEquals(0, updates.get("text").get(0).getDocumentFrequency());
     }
 
     @Test
@@ -278,25 +306,23 @@ public class TestCommitIndexDiffer extends SolrTestCaseJ4 {
         clearIndex();
         SolrInputDocument doc = getDocument();
 
-        for (int i =0; i < 50; i++) {
+        for (int i = 0; i < 50; i++) {
             doc.setField("id", i);
             add(doc);
         }
-        commit();
-        Map<String, List<DocumentFrequencyUpdate>> earlierUpdate= MockDocumentFrequencyUpdateEventListener.getLastUpdate();
 
         commit();
-        Map<String, List<DocumentFrequencyUpdate>> updates = MockDocumentFrequencyUpdateEventListener.getLastUpdate();
+        final Map<String, List<DocumentFrequencyUpdate>> earlierUpdate= updateEventListener.getLastUpdate();
+        assertTrue(earlierUpdate.size() > 0);
+        updateEventListener.cleanup();
 
-        // It seems that empty commits do not create a new
-        for (String key : earlierUpdate.keySet()) {
-            List<DocumentFrequencyUpdate> earlierUpdates = earlierUpdate.get(key);
-            List<DocumentFrequencyUpdate> newUpdates = updates.get(key);
-            for (int i =0; i< earlierUpdates.size(); i++) {
-                assertEquals(earlierUpdates.get(i).docFreq, newUpdates.get(i).docFreq);
-            }
+        commit();
+        final Map<String, List<DocumentFrequencyUpdate>> updates = updateEventListener.getLastUpdate();
+        assertEquals(3, updates.size());
+        for (List<DocumentFrequencyUpdate> updateList : updates.values()) {
+            assertTrue(updateList.isEmpty());
         }
+        updateEventListener.cleanup();
     }
-
 }
 

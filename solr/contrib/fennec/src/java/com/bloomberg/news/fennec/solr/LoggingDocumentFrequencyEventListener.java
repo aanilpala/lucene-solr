@@ -17,7 +17,6 @@ package com.bloomberg.news.fennec.solr;
  * limitations under the License.
  */
 
-import com.bloomberg.news.fennec.common.DocumentFrequencyKafkaSerializer;
 import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
 
 import org.apache.solr.common.util.NamedList;
@@ -28,12 +27,12 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.concurrent.TimeUnit;
 
 /**
  * DocumentFrequency Event listener that does not publish but logs all the updates
@@ -105,6 +104,8 @@ public class LoggingDocumentFrequencyEventListener extends AbstractDocumentFrequ
 
     @Override
     protected void updateDocumentFrequency(Map<String, List<DocumentFrequencyUpdate>> updateMap) {
+        final long startTime = System.nanoTime();
+        
         List<Map<String, Object>> fields = new LinkedList<Map<String, Object>>();
         
         int totalTermsChanged = 0;
@@ -125,7 +126,7 @@ public class LoggingDocumentFrequencyEventListener extends AbstractDocumentFrequ
             fields.add(fieldData);
         }
         
-        Map<String, Object> data = new HashMap<String, Object>(2);
+        Map<String, Object> data = new HashMap<String, Object>(2, 1.0f);
         data.put("fields", fields);
         data.put("totalTermsChanged", totalTermsChanged);
         
@@ -135,5 +136,8 @@ public class LoggingDocumentFrequencyEventListener extends AbstractDocumentFrequ
         } catch (JsonProcessingException e) {
             log.error("Failed to log update: {}", e);
         }
+        
+        log.info("updateDocumentFrequency completed in {} miliseconds", 
+                 TimeUnit.MILLISECONDS.convert(System.nanoTime() - startTime, TimeUnit.NANOSECONDS));
     }
 }

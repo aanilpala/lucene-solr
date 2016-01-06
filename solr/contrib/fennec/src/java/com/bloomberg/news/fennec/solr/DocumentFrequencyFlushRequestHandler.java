@@ -21,7 +21,6 @@ import com.bloomberg.news.fennec.common.FennecConstants;
 
 import org.apache.lucene.index.IndexCommit;
 import org.apache.solr.cloud.CloudDescriptor;
-import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.handler.RequestHandlerBase;
@@ -63,18 +62,14 @@ public class DocumentFrequencyFlushRequestHandler extends RequestHandlerBase {
     public void init(NamedList args) {
         log.info("Initializing DocumentFrequencyFlushRequestHandler");
 
-        try {
-            String fields = (String) args.get(FennecConstants.FIELDS_KEY);
-            log.info("Event listener configured to diff fields: {}", fields);
-            if (fields != null) {
-                this.fieldsToDiff = new HashSet<String>(Arrays.asList(fields.split(FennecConstants.SEPARATOR)));
-            }
-            log.info("Flushing configured for fields: {}", fields);
-            this.producer= new KafkaDocumentFrequencyUpdateProducer(args);
-            log.info("Successfully initialized flush request handler");
-        } catch (IOException e) {
-            log.error("Unableld to initialize DocumentFrequencyFlushHandler {}", e);
+        String fields = (String) args.get(FennecConstants.FIELDS_KEY);
+        log.info("Event listener configured to diff fields: {}", fields);
+        if (fields != null) {
+            this.fieldsToDiff = new HashSet<String>(Arrays.asList(fields.split(FennecConstants.SEPARATOR)));
         }
+        log.info("Flushing configured for fields: {}", fields);
+        this.producer = new KafkaDocumentFrequencyUpdateProducer(args);
+        log.info("Successfully initialized flush request handler");
     }
 
     @Override
@@ -104,44 +99,40 @@ public class DocumentFrequencyFlushRequestHandler extends RequestHandlerBase {
      * Method called by handleRequestBody so that we can flush all the document frequencies from a core to the store
      * @param core SolrCore to flush, the core MUST NOT be null
      * @return Whether a flush was completed or not
-     * @throws IOException
      */
     private boolean flushCore(SolrCore core){
-        CloudDescriptor cloudDescriptor = core.getCoreDescriptor().getCloudDescriptor();
-        String shardId, collectionName;
+        final CloudDescriptor cloudDescriptor = core.getCoreDescriptor().getCloudDescriptor();
+        final String collectionName, shardId;
 
-        if (cloudDescriptor == null) {
-            shardId = DocumentFrequencyUpdate.DEFAULT_SHARD;
-            collectionName = core.getCoreDescriptor().getCollectionName();
-        } else {
-            shardId = cloudDescriptor.getShardId();
+        if (cloudDescriptor != null) {
             collectionName = cloudDescriptor.getCollectionName();
+            shardId = cloudDescriptor.getShardId();
+        } else {
+            collectionName = null;
+            shardId = null;
         }
 
         // Perform the flush only if this core is not in a solr cloud application or is the leader of the shard
         if (cloudDescriptor == null || cloudDescriptor.isLeader()) {
-
-            IndexCommit commit = core.getDeletionPolicy().getLatestCommit();
-            long commitGen = commit.getGeneration();
-            log.info("flushing core={} commitgen={} commit={} fieldsToDiff={}", core, commitGen, commit, fieldsToDiff);
-            // Must save also, even though at this point we are only operating on 1 commit
+          
+            final long commitGen = core.getDeletionPolicy().getLatestCommit().getGeneration();
             core.getDeletionPolicy().saveCommitPoint(commitGen);
+            final IndexCommit commit = core.getDeletionPolicy().getCommitPoint(commitGen);
+            if (commit == null) {
+                log.info("could not retreive commit gen {}", commitGen);
+                return false;
+            }
+            
+            log.info("flushing core={} commitgen={} commit={} fieldsToDiff={}", core, commitGen, commit, fieldsToDiff);
 
             Map<String, List<DocumentFrequencyUpdate>> updates = Collections.emptyMap();
             try {
-                updates = DocumentFrequencyIndexDiffer.diffCommits(null, commit, shardId, collectionName, this.fieldsToDiff);
-                core.getDeletionPolicy().releaseCommitPoint(commitGen);
-            } catch (IOException e) {
-                log.error("Unable to flush document frequencies for collection {}, shard {}", collectionName, shardId);
-                throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, "Error whiling performing diff", e);
+                updates = DocumentFrequencyIndexDiffer.diffCommits(null, commit, this.fieldsToDiff, collectionName, shardId);
+                producer.updateDocumentFrequency(updates);
+                return true;
             } finally {
-                // Cleanup
                 core.getDeletionPolicy().releaseCommitPoint(commitGen);
             }
-
-            this.producer.updateDocumentFrequency(updates);
-            // Update completed
-            return true;
         }
 
         // We did nothing

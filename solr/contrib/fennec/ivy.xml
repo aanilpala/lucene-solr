@@ -21,7 +21,7 @@
     <dependencies>
 
         <dependency org="org.apache.kafka" name="kafka_2.10" rev="0.8.0"/>
-        <dependency org="com.bloomberg.news" name="fennec-common" rev="1.0.0">
+        <dependency org="com.bloomberg.news" name="fennec-common" rev="1.1.0">
             <artifact name="fennec-common" ext="jar"/>
         </dependency>
     </dependencies>

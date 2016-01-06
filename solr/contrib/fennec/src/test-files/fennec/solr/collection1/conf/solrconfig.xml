@@ -43,13 +43,13 @@
              to vary the lockType canset it as needed.
         -->
         <lockType>${solr.tests.lockType:single}</lockType>
-        <deletionPolicy class="com.bloomberg.news.fennec.solr.DocumentFrequencyUpdateDeletionPolicy"></deletionPolicy>
+        <deletionPolicy class="solr.SolrDeletionPolicy">
+        	<str name="maxCommitsToKeep">2</str>
+      	</deletionPolicy>
         <infoStream>true</infoStream>
     </indexConfig>
 
     <updateHandler class="solr.DirectUpdateHandler2">
-        <listener event="postCommit" class="com.bloomberg.news.fennec.MockDocumentFrequencyUpdateEventListener">
-        </listener>
     </updateHandler>
 
     <!-- enable streaming for testing... -->

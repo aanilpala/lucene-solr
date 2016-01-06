@@ -44,9 +44,8 @@ public class KafkaDocumentFrequencyUpdateProducer {
 
     /**
      * Constructor allowing a custom properties file
-     * @throws IOException
      */
-    public KafkaDocumentFrequencyUpdateProducer(NamedList args) throws IOException {
+    public KafkaDocumentFrequencyUpdateProducer(NamedList args) {
         log.info(String.format("Initializing Kafka Producer with properties from solrconfig"));
         Properties properties = new Properties();
 
@@ -75,8 +74,9 @@ public class KafkaDocumentFrequencyUpdateProducer {
         for (String fieldName : updateMap.keySet()) {
             List<DocumentFrequencyUpdate> updates = updateMap.get(fieldName);
             for (DocumentFrequencyUpdate update : updates) {
+                // TODO: null collectionName / shard
                 KeyedMessage<String, String> updateData =
-                        new KeyedMessage<>( update.collectionName , update.getKey(),
+                        new KeyedMessage<>( update.getCollectionName(), update.getKey(),
                                 DocumentFrequencyKafkaSerializer.serialize(update));
                 this.kafkaProducer.send(updateData);
             }

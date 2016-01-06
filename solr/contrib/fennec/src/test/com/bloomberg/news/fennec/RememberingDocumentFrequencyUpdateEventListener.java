@@ -16,17 +16,15 @@ import java.util.concurrent.Future;
 /**
  * Mock event listener for unit tests
  */
-public class MockDocumentFrequencyUpdateEventListener extends AbstractDocumentFrequencyUpdateEventListener {
-    public static Map<String, List<DocumentFrequencyUpdate>> lastUpdate = Collections.emptyMap();
+public class RememberingDocumentFrequencyUpdateEventListener extends AbstractDocumentFrequencyUpdateEventListener {
+    public Map<String, List<DocumentFrequencyUpdate>> lastUpdate;
 
     @Override
     public void init(NamedList args) {
         super.init(args);
-        // Set the diffInterval to 0 because we want to diff everytime for the tests
-        this.diffInterval = 0;
     }
 
-    public MockDocumentFrequencyUpdateEventListener(SolrCore core) throws IOException {
+    public RememberingDocumentFrequencyUpdateEventListener(SolrCore core) throws IOException {
         super(core);
     }
 
@@ -35,7 +33,7 @@ public class MockDocumentFrequencyUpdateEventListener extends AbstractDocumentFr
         lastUpdate = updates;
     }
 
-    public static Map<String, List<DocumentFrequencyUpdate>> getLastUpdate() {
+    public Map<String, List<DocumentFrequencyUpdate>> getLastUpdate() {
         return lastUpdate;
     }
 
@@ -51,7 +49,7 @@ public class MockDocumentFrequencyUpdateEventListener extends AbstractDocumentFr
         }
     }
 
-    public static void cleanup() {
-        lastUpdate = Collections.emptyMap();
+    public void cleanup() {
+        lastUpdate = null;
     }
 }

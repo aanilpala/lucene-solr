@@ -39,10 +39,9 @@ public class KafkaDocumentFrequencyUpdateEventListener extends AbstractDocumentF
 
     /**
      * Constructor called during solr initialization
-     * @param core
-     * @throws IOException
+     * @param core The core that contains the commits to diff
      */
-    public KafkaDocumentFrequencyUpdateEventListener(SolrCore core) throws IOException {
+    public KafkaDocumentFrequencyUpdateEventListener(SolrCore core) {
         super(core);
     }
 
@@ -50,13 +49,8 @@ public class KafkaDocumentFrequencyUpdateEventListener extends AbstractDocumentF
     public void init(NamedList args) {
         super.init(args);
         log.info("Initializing Kafka Event Listener");
-        try {
-            this.producer= new KafkaDocumentFrequencyUpdateProducer(args);
-            log.info("Finished initializing kafka event listener");
-        } catch (IOException e) {
-            log.error("Unable to initialize kafka producer");
-            throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, "Unable to initialize Event Listener", e);
-        }
+        this.producer= new KafkaDocumentFrequencyUpdateProducer(args);
+        log.info("Finished initializing kafka event listener");
 
     }
 

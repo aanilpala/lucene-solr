@@ -19,28 +19,28 @@ package com.bloomberg.news.fennec.solr;
 
 import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
 import com.bloomberg.news.fennec.common.FennecConstants;
+
 import org.apache.lucene.index.IndexCommit;
+import org.apache.lucene.index.IndexDeletionPolicy;
 import org.apache.solr.cloud.CloudDescriptor;
-import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.AbstractSolrEventListener;
 import org.apache.solr.core.CloseHook;
 import org.apache.solr.core.IndexDeletionPolicyWrapper;
 import org.apache.solr.core.SolrCore;
+import org.apache.solr.core.SolrDeletionPolicy;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -64,19 +64,21 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
     private static final Logger log = LoggerFactory.getLogger(AbstractDocumentFrequencyUpdateEventListener.class);
     private static final int DEFAULT_DIFF_INTERVAL_MS = 1000;
     private static final int DEFAULT_SHUTDOWN_TIME_SECONDS = 1;
-    // NOTE we can only have 1 thread in the thread pool, because if we have more than one, we cannot
-    // guarantee the order of updates when we publish to the store
-    private static final int DIFF_THREAD_LIMIT = 1;
 
-    // Supply the value in MILLISECONDS
-    private static final String DIFF_INTERVAL = "diff.interval";
+    private static final String DIFF_INTERVAL_MS = "diff.interval.ms";
 
     // Differ doesn't store any state so the fields to diff on are here
     protected Set<String> fieldsToDiff;
-    private long lastDiffEpoch;
-    protected int diffInterval;
+    protected int diffIntervalMs = DEFAULT_DIFF_INTERVAL_MS;
 
     protected ThreadPoolExecutor executor;
+    
+    private final CloudDescriptor cloudDescriptor;
+    private final String collectionName;
+    private final String shardId;
+    
+    private Long previousDiffTime; // null previousDiffTime means no diff yet
+    private Long previousCommitGeneration;
 
     /**
      * The task that contains the logic for performing the diff and also publishing
@@ -85,45 +87,53 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
     protected class DiffTask implements Runnable {
         private IndexCommit olderCommit;
         private IndexCommit newerCommit;
-        private long olderGenNum;
-        private long newerGenNum;
 
-        private String shardId;
-        private String collectionName;
-        private IndexDeletionPolicyWrapper deletionPolicy;
-        // Nullable, null fieldsToDiff indicate a diff on all fields
-        private final Set<String> fieldsToDiff;
-
-        public DiffTask(IndexCommit olderCommit, IndexCommit newerCommit,
-                        long olderGenNum, long newerGenNum, String shardId,
-                        String collectionName, Set<String> diffFields,
-                        IndexDeletionPolicyWrapper deletionPolicy) {
-            this.olderCommit = olderCommit;
-            this.newerCommit = newerCommit;
-            this.olderGenNum = olderGenNum;
-            this.newerGenNum = newerGenNum;
-            this.shardId = shardId;
-            this.collectionName = collectionName;
-            this.fieldsToDiff = diffFields;
-            this.deletionPolicy = deletionPolicy;
+        public DiffTask(IndexCommit newerCommit) {
+            this.newerCommit = newerCommit;            
         }
 
         @Override
         public void run() {
-            long startTime = System.nanoTime();
+            final long startTime = System.nanoTime();
+            boolean successfulDiff = false;
+            
             try {
-                Map<String, List<DocumentFrequencyUpdate>> updates =
-                        DocumentFrequencyIndexDiffer.diffCommits(olderCommit, newerCommit, shardId, collectionName, fieldsToDiff);
+                if (previousCommitGeneration != null) {
+                    olderCommit = getCore().getDeletionPolicy().getCommitPoint(previousCommitGeneration);
+                    if (olderCommit == null) {
+                        log.warn("Could not retreive older commit {}", previousCommitGeneration);
+                    }
+                }
 
+                final Map<String, List<DocumentFrequencyUpdate>> updates = diffCommits(olderCommit, newerCommit);
+                if (updates == null) {
+                    // no diff would be empty map
+                    log.warn("Diff was not successful");
+                    return;
+                }
+
+                setPreviousDiffTime(startTime);
                 updateDocumentFrequency(updates);
-            }catch (IOException e) {
-                // We are not allowed to throw exceptions here so will catch this
-                throw new SolrException(SolrException.ErrorCode.SERVICE_UNAVAILABLE, "Error publishing diff", e);
+
+                previousCommitGeneration = newerCommit.getGeneration();
+                successfulDiff = true;
             } finally {
-                deletionPolicy.releaseCommitPoint(newerGenNum);
-                if (olderGenNum >= 0) deletionPolicy.releaseCommitPoint(olderGenNum);
+                final IndexDeletionPolicyWrapper deletionPolicy = getCore().getDeletionPolicy();
+                if (olderCommit != null) {
+                    deletionPolicy.releaseCommitPoint(olderCommit.getGeneration());
+                }
+                
+                if (! successfulDiff) {
+                    // reset previous commit gen to null so that we don't keep trying to retrieve it
+                    previousCommitGeneration = null;
+                    // unsuccessful diff means previousCommitGeneration wouldn't have been updated to point to newerCommit,
+                    // therefore we must release it here
+                    deletionPolicy.releaseCommitPoint(newerCommit.getGeneration());
+                }
             }
-            log.debug("Listener completed update in {} miliseconds", (System.nanoTime() - startTime) /1000 );
+            
+            log.info("Diff task completed in {} miliseconds", 
+                     TimeUnit.MILLISECONDS.convert(System.nanoTime() - startTime, TimeUnit.NANOSECONDS));
         }
     }
 
@@ -140,7 +150,6 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
         @Override
         public void postClose(SolrCore core) {
             if (!executor.isTerminated()) {
-                executor.shutdown();
                 try {
                     executor.awaitTermination(DEFAULT_SHUTDOWN_TIME_SECONDS, TimeUnit.SECONDS);
                 } catch (InterruptedException e) {
@@ -153,31 +162,49 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
 
     public AbstractDocumentFrequencyUpdateEventListener(SolrCore core) {
         super(core);
-        this.diffInterval = DEFAULT_DIFF_INTERVAL_MS;
-        // Set to 0 because we haven't done a diff yet
-        this.lastDiffEpoch = 0;
-        this.fieldsToDiff = null;
-        // ThreadPoolExecutor is the implementation used by executors
-        this.executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(DIFF_THREAD_LIMIT);
+        // we only want a single thread diffing and sending out updates
+        this.executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 
         // We need to add a close hook to Solr because we need to shutdown our executor service
-       registerCloseHook();
+        registerCloseHook();
+       
+        cloudDescriptor = core.getCoreDescriptor().getCloudDescriptor();
+        
+        if (cloudDescriptor == null) {
+            shardId = null;
+            collectionName = null;
+        } else {
+            shardId = cloudDescriptor.getShardId();
+            collectionName = cloudDescriptor.getCollectionName();
+        }
     }
 
     @Override
     public void init(NamedList args) {
-        log.info("Initializing Abstract Event Listener");
-        if (args.get(DIFF_INTERVAL) != null) {
-            this.diffInterval = (int) args.get(DIFF_INTERVAL);
+        log.info("Initializing Abstract Event Listener, args={}", args);
+        
+        final Integer diffInterval = (Integer) args.get(DIFF_INTERVAL_MS);
+        if (diffInterval != null) {
+            this.diffIntervalMs = diffInterval.intValue();
         }
-        log.info("Arguments: {}", args);
+        log.info("Event listener configured to wait at least {} ms between diffs", this.diffIntervalMs);
 
-        String fields = (String) args.get(FennecConstants.FIELDS_KEY);
-        log.info("Event listener configured to diff fields: {}", fields);
-        if (fields != null && ! fields.isEmpty()) {
-            this.fieldsToDiff = new HashSet<>();
-            Collections.addAll(this.fieldsToDiff, fields.split(FennecConstants.SEPARATOR));
+        final String fields = (String) args.get(FennecConstants.FIELDS_KEY);
+        if (fields != null) {
+            this.fieldsToDiff = new HashSet<>(Arrays.asList(fields.split(FennecConstants.SEPARATOR)));
+            log.info("Event listener configured to diff fields: {}", fieldsToDiff);
+        } else {
+            log.info("Event listener configured to diff all fields");
         }
+        
+        final IndexDeletionPolicy deletionPolicy = this.getCore().getDeletionPolicy().getWrappedDeletionPolicy();
+        if (deletionPolicy instanceof SolrDeletionPolicy) {
+            final int maxCommitsToKeep = ((SolrDeletionPolicy) deletionPolicy).getMaxCommitsToKeep();    
+            if (maxCommitsToKeep < 2) {
+                log.warn("SolrDeletionPolicy is keeping {} commits which is unusual", maxCommitsToKeep);
+            }
+        }
+
         log.info("Finished initializing abstract event listener");
     }
 
@@ -186,87 +213,58 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
         // Method is called within DirectUpdateHandler2's commit method
         // from inside the commitLock critical section
         // First check has enough time passed since the last diff for it to be worth it to diff right now
+      
+        final long startTime = System.nanoTime();
 
-        if (System.currentTimeMillis() - this.lastDiffEpoch < this.diffInterval) {
-            log.debug("Not enough time has passed since last diff, with interval {} miliseconds. Skipping...",
-                    this.diffInterval);
-            return;
-        }
-
-        // This is approximate, so it could be that there isn't actually an available thread
-        // and this still happens
-        if ( this.executor.getActiveCount() >= DIFF_THREAD_LIMIT) {
-            log.debug("No thread available to perform diff, consider reducing the diff interval currently set at {} ms. " +
-                    "Skipping...", diffInterval);
-            return;
-        }
-
-        SolrCore core = this.getCore();
-        CloudDescriptor cloudDescriptor = core.getCoreDescriptor().getCloudDescriptor();
-
-        String shardId, collectionName;
-        if (cloudDescriptor == null) {
-            shardId = DocumentFrequencyUpdate.DEFAULT_SHARD;
-            collectionName = core.getCoreDescriptor().getCollectionName();
-        } else {
-            shardId = cloudDescriptor.getShardId();
-            collectionName = cloudDescriptor.getCollectionName();
+        final Long previousDiffTime = getPreviousDiffTime();
+        if (previousDiffTime != null) {
+            final Long interval = TimeUnit.MILLISECONDS.convert(System.nanoTime() - previousDiffTime, TimeUnit.NANOSECONDS);
+            if (interval < this.diffIntervalMs) {
+                log.debug("{} ms has passed since last diff, with interval {} miliseconds. Skipping...",
+                          interval, this.diffIntervalMs);
+                return;
+            }
         }
 
         // If we are not a solrcloud node
         // or that we are, AND we are the leader
         // diff the indices and produce logs for kafka
-        if ( cloudDescriptor == null || cloudDescriptor.isLeader()) {
-            Map<Long, IndexCommit> commits = core.getDeletionPolicy().getCommits();
-
-            //Check that there is at least a commit
-            if (commits.isEmpty()) {
-                log.debug("No commits were found in post commit, skipping...");
-                return;
-            }
-
-            // Now iterate through the commits
-            List<Long> sortedGenerationNums = new ArrayList<>();
-            sortedGenerationNums.addAll(commits.keySet());
-            Collections.sort(sortedGenerationNums);
-            long newestCommitGen = -1, earlierCommitGen = -1;
-            // Now that the commits are sorted, we want to reserve them
-            // We also only care about the last 2
-            // NOTE this method will save the commit points before passing them off to a thread pool to handle the
-            // diffing and publishing, it is in that task where the commit points must be released
-            DiffTask task = null;
-            if (sortedGenerationNums.size() == 1 ) {
-                newestCommitGen = sortedGenerationNums.get(0);
-                core.getDeletionPolicy().saveCommitPoint(newestCommitGen);
-                IndexCommit newestCommit = core.getDeletionPolicy().getCommitPoint(newestCommitGen);
-                task = new DiffTask(null, newestCommit, earlierCommitGen,
-                        newestCommitGen, shardId, collectionName, fieldsToDiff, core.getDeletionPolicy());
-            } else {
-                newestCommitGen = sortedGenerationNums.get(sortedGenerationNums.size() - 1);
-                earlierCommitGen = sortedGenerationNums.get(sortedGenerationNums.size() - 2);
-
-                // Save the commit points so that the commits won't be deleted by something else until we are done
-                core.getDeletionPolicy().saveCommitPoint(newestCommitGen);
-                core.getDeletionPolicy().saveCommitPoint(earlierCommitGen);
-
-                IndexCommit newerCommit = core.getDeletionPolicy().getCommitPoint(newestCommitGen);
-                IndexCommit earlierCommit = core.getDeletionPolicy().getCommitPoint(earlierCommitGen);
-                task = new DiffTask(earlierCommit, newerCommit, earlierCommitGen,
-                        newestCommitGen, shardId, collectionName, fieldsToDiff, core.getDeletionPolicy());
-            }
-            handleDiffFuture(this.executor.submit(task));
-            this.lastDiffEpoch = System.currentTimeMillis();
+        if ( cloudDescriptor != null && !cloudDescriptor.isLeader()) {
+            log.debug("Not a leader in cloud mode, skipping");
+            return;
         }
+
+        final IndexDeletionPolicyWrapper deletionPolicy = getCore().getDeletionPolicy();
+        final Long latestGenerationNum = deletionPolicy.getLatestCommit().getGeneration();
+        deletionPolicy.saveCommitPoint(latestGenerationNum);
+        final IndexCommit latestCommitPoint = deletionPolicy.getCommitPoint(latestGenerationNum);
+
+        if (latestCommitPoint == null) {
+            deletionPolicy.releaseCommitPoint(latestGenerationNum);
+            log.debug("commit gen {} not available, skipping", latestGenerationNum);
+            return;
+        }
+        
+        final DiffTask diffTask = new DiffTask(latestCommitPoint);
+        
+        try {
+            handleDiffFuture(this.executor.submit(diffTask));
+        } catch (RejectedExecutionException e) {
+            log.warn("Difftask was rejected: {}", e);
+            deletionPolicy.releaseCommitPoint(latestGenerationNum);
+            return;
+        }
+        
+        log.info("postCommit completed in {} miliseconds", 
+                 TimeUnit.MILLISECONDS.convert(System.nanoTime() - startTime, TimeUnit.NANOSECONDS));
     }
 
     @Override
     public void postSoftCommit() {
-
     }
 
     @Override
     public void newSearcher(SolrIndexSearcher solrIndexSearcher, SolrIndexSearcher solrIndexSearcher1) {
-
     }
 
     /**
@@ -282,7 +280,19 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
     protected void registerCloseHook() {
         this.getCore().addCloseHook(new EventListenerCloseHook());
     }
-
+    
+    synchronized Long getPreviousDiffTime() {
+        return previousDiffTime;
+    }
+    
+    synchronized void setPreviousDiffTime(Long diffTime) {
+        previousDiffTime = diffTime;
+    }
+    
     abstract protected void updateDocumentFrequency(Map<String, List<DocumentFrequencyUpdate>> updates);
+    
+    protected Map<String, List<DocumentFrequencyUpdate>> diffCommits(IndexCommit olderCommit, IndexCommit newerCommit) {
+        return DocumentFrequencyIndexDiffer.diffCommits(olderCommit, newerCommit, fieldsToDiff, collectionName, shardId);
+    }
 
 }
