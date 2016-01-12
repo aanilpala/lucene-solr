@@ -1,4 +1,4 @@
-package com.bloomberg.news.fennec.solr;
+package com.bloomberg.news.fennec.solr.kafka;
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,6 +18,7 @@ package com.bloomberg.news.fennec.solr;
 
 import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
 import com.bloomberg.news.fennec.common.FennecConstants;
+import com.bloomberg.news.fennec.solr.DocumentFrequencyIndexDiffer;
 
 import org.apache.lucene.index.IndexCommit;
 import org.apache.solr.cloud.CloudDescriptor;
@@ -29,7 +30,6 @@ import org.apache.solr.response.SolrQueryResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;

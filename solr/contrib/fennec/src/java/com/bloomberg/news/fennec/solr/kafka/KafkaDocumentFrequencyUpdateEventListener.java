@@ -1,4 +1,4 @@
-package com.bloomberg.news.fennec.solr;
+package com.bloomberg.news.fennec.solr.kafka;
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -18,13 +18,14 @@ package com.bloomberg.news.fennec.solr;
  */
 
 import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
+import com.bloomberg.news.fennec.solr.AbstractDocumentFrequencyUpdateEventListener;
+
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.SolrCore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.util.*;
 
 /**
@@ -34,7 +35,6 @@ public class KafkaDocumentFrequencyUpdateEventListener extends AbstractDocumentF
 
     private static final Logger log = LoggerFactory.getLogger(KafkaDocumentFrequencyUpdateEventListener.class);
 
-    // Differ doesn't store any state so the fields to diff on are here
     protected KafkaDocumentFrequencyUpdateProducer producer;
 
     /**
@@ -43,6 +43,11 @@ public class KafkaDocumentFrequencyUpdateEventListener extends AbstractDocumentF
      */
     public KafkaDocumentFrequencyUpdateEventListener(SolrCore core) {
         super(core);
+        
+        if (core.getCoreDescriptor().getCloudDescriptor() == null) {
+            log.error("Kafka producer requires cloud setup");
+            throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, "Kafka producer requires cloud setup");
+        }
     }
 
     @Override
@@ -50,7 +55,7 @@ public class KafkaDocumentFrequencyUpdateEventListener extends AbstractDocumentF
         super.init(args);
         log.info("Initializing Kafka Event Listener");
         this.producer= new KafkaDocumentFrequencyUpdateProducer(args);
-        log.info("Finished initializing kafka event listener");
+        log.info("Finished initializing Kafka event listener");
 
     }
 
