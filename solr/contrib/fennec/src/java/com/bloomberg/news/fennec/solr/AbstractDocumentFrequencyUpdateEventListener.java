@@ -33,6 +33,7 @@ import org.apache.solr.search.SolrIndexSearcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -77,7 +78,7 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
     private final String collectionName;
     private final String shardId;
     
-    private Long previousDiffTime; // null previousDiffTime means no diff yet
+    private Long previousSuccessfulDiffTime;
     private Long previousCommitGeneration;
 
     /**
@@ -85,7 +86,7 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
      * Should be submitted to the thread pool.
      */
     protected class DiffTask implements Runnable {
-        private IndexCommit olderCommit;
+        private IndexCommit previousCommit;
         private IndexCommit newerCommit;
 
         public DiffTask(IndexCommit newerCommit) {
@@ -94,46 +95,79 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
 
         @Override
         public void run() {
+            log.info("Running DiffTask previousCommitGeneration={} newerCommitGeneration={}",
+                     previousCommitGeneration,
+                     newerCommit.getGeneration());
+
             final long startTime = System.nanoTime();
+
+            if (previousCommitGeneration == null) {
+                initializeOnFirstPostCommit();
+            }
+
             boolean successfulDiff = false;
             
+            final IndexDeletionPolicyWrapper deletionPolicy = getCore().getDeletionPolicy();
+
             try {
                 if (previousCommitGeneration != null) {
-                    olderCommit = getCore().getDeletionPolicy().getCommitPoint(previousCommitGeneration);
-                    if (olderCommit == null) {
-                        log.warn("Could not retreive older commit {}", previousCommitGeneration);
+                    previousCommit = deletionPolicy.getCommitPoint(previousCommitGeneration);
+                    if (previousCommit == null) {
+                        log.warn("Could not retrieve previous commit {}", previousCommitGeneration);
                     }
                 }
 
-                final Map<String, List<DocumentFrequencyUpdate>> updates = diffCommits(olderCommit, newerCommit);
+                final Map<String, List<DocumentFrequencyUpdate>> updates = diffCommits(previousCommit, newerCommit);
                 if (updates == null) {
                     // no diff would be empty map
                     log.warn("Diff was not successful");
                     return;
                 }
 
-                setPreviousDiffTime(startTime);
                 updateDocumentFrequency(updates);
 
-                previousCommitGeneration = newerCommit.getGeneration();
+                setPreviousSuccessfulDiffTime(System.nanoTime());
                 successfulDiff = true;
             } finally {
-                final IndexDeletionPolicyWrapper deletionPolicy = getCore().getDeletionPolicy();
-                if (olderCommit != null) {
-                    deletionPolicy.releaseCommitPoint(olderCommit.getGeneration());
+                final long newerCommitGeneration = newerCommit.getGeneration();
+
+                final long duration = TimeUnit.MILLISECONDS.convert(System.nanoTime() - startTime, TimeUnit.NANOSECONDS);
+                if (successfulDiff) {
+                    log.info("Diff task completed in {} milliseconds, previousCommitGeneration={} newerCommitGeneration={}", 
+                             duration, previousCommitGeneration, newerCommitGeneration);
+                } else {
+                    log.warn("Diff task was unsuccessful, took {} milliseconds, previousCommitGeneration={} newerCommitGeneration={}", 
+                             duration, previousCommitGeneration, newerCommitGeneration);
+                }
+
+                if (previousCommit != null) {
+                    deletionPolicy.releaseCommitPoint(previousCommit.getGeneration());
                 }
                 
-                if (! successfulDiff) {
-                    // reset previous commit gen to null so that we don't keep trying to retrieve it
-                    previousCommitGeneration = null;
-                    // unsuccessful diff means previousCommitGeneration wouldn't have been updated to point to newerCommit,
-                    // therefore we must release it here
-                    deletionPolicy.releaseCommitPoint(newerCommit.getGeneration());
-                }
+                previousCommitGeneration = newerCommit.getGeneration();
             }
-            
-            log.info("Diff task completed in {} miliseconds", 
-                     TimeUnit.MILLISECONDS.convert(System.nanoTime() - startTime, TimeUnit.NANOSECONDS));
+        }
+    }
+
+    protected void initializeOnFirstPostCommit() {
+        final IndexDeletionPolicyWrapper deletionPolicyWrapper = getCore().getDeletionPolicy();
+        final Map<Long, IndexCommit> allCommits = deletionPolicyWrapper.getCommits();
+        final List<Long> sortedCommitGenerations = new ArrayList<>(allCommits.keySet());
+        
+        if (sortedCommitGenerations.size() > 1) {
+            java.util.Collections.sort(sortedCommitGenerations);
+            final long previousCommitGeneration = sortedCommitGenerations.get(sortedCommitGenerations.size() - 2);
+            deletionPolicyWrapper.saveCommitPoint(previousCommitGeneration);
+
+            if (deletionPolicyWrapper.getCommitPoint(previousCommitGeneration) == null) {
+                log.error("Could not retrieve commit generation={}", previousCommitGeneration);
+                return;
+            }
+
+            this.previousCommitGeneration = previousCommitGeneration;
+            log.info("Initializing previousCommitGeneration={}", previousCommitGeneration);
+        } else {
+            log.info("No previous commit found to use as a base for the first diff");
         }
     }
 
@@ -197,7 +231,8 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
             log.info("Event listener configured to diff all fields");
         }
         
-        final IndexDeletionPolicy deletionPolicy = this.getCore().getDeletionPolicy().getWrappedDeletionPolicy();
+        final IndexDeletionPolicyWrapper deletionPolicyWrapper = this.getCore().getDeletionPolicy();
+        final IndexDeletionPolicy deletionPolicy = deletionPolicyWrapper.getWrappedDeletionPolicy();
         if (deletionPolicy instanceof SolrDeletionPolicy) {
             final int maxCommitsToKeep = ((SolrDeletionPolicy) deletionPolicy).getMaxCommitsToKeep();    
             if (maxCommitsToKeep < 2) {
@@ -205,6 +240,7 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
             }
         }
 
+                
         log.info("Finished initializing abstract event listener");
     }
 
@@ -216,7 +252,7 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
       
         final long startTime = System.nanoTime();
 
-        final Long previousDiffTime = getPreviousDiffTime();
+        final Long previousDiffTime = getPreviousSuccessfulDiffTime();
         if (previousDiffTime != null) {
             final Long interval = TimeUnit.MILLISECONDS.convert(System.nanoTime() - previousDiffTime, TimeUnit.NANOSECONDS);
             if (interval < this.diffIntervalMs) {
@@ -281,18 +317,17 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
         this.getCore().addCloseHook(new EventListenerCloseHook());
     }
     
-    synchronized Long getPreviousDiffTime() {
-        return previousDiffTime;
+    synchronized Long getPreviousSuccessfulDiffTime() {
+        return previousSuccessfulDiffTime;
     }
     
-    synchronized void setPreviousDiffTime(Long diffTime) {
-        previousDiffTime = diffTime;
+    synchronized void setPreviousSuccessfulDiffTime(Long diffTime) {
+        previousSuccessfulDiffTime = diffTime;
     }
     
     abstract protected void updateDocumentFrequency(Map<String, List<DocumentFrequencyUpdate>> updates);
     
-    protected Map<String, List<DocumentFrequencyUpdate>> diffCommits(IndexCommit olderCommit, IndexCommit newerCommit) {
-        return DocumentFrequencyIndexDiffer.diffCommits(olderCommit, newerCommit, fieldsToDiff, collectionName, shardId);
+    protected Map<String, List<DocumentFrequencyUpdate>> diffCommits(IndexCommit previousCommit, IndexCommit newerCommit) {
+        return DocumentFrequencyIndexDiffer.diffCommits(previousCommit, newerCommit, fieldsToDiff, collectionName, shardId);
     }
-
 }

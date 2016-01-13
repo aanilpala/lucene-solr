@@ -137,9 +137,11 @@ public class DocumentFrequencyIndexDiffer {
         
         addMetadata(diff, docCounts, collection, shard);
         
-        log.debug("Differ produced diffs for {} fields stored completed in {} miliseconds", 
+        log.info("Differ produced diffs for {} fields in {} milliseconds, earlierCommit={}, laterCommit={}", 
                   fieldsFilter == null ? "all" : fieldsFilter.size(),
-                  TimeUnit.MILLISECONDS.convert(System.nanoTime() - startTime, TimeUnit.NANOSECONDS));
+                  TimeUnit.MILLISECONDS.convert(System.nanoTime() - startTime, TimeUnit.NANOSECONDS),
+                  earlierCommit,
+                  laterCommit);
         
         return diff;
     }
