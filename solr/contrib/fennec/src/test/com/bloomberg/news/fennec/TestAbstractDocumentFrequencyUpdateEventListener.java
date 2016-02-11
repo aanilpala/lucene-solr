@@ -1,7 +1,11 @@
 package com.bloomberg.news.fennec;
 
-import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
-import com.yammer.metrics.Metrics;
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.List;
+import java.util.Map;
 
 import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -13,12 +17,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.BufferedReader;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.util.List;
-import java.util.Map;
+import com.bloomberg.news.fennec.common.DocumentFrequencyUpdate;
 
 // Class will test the solr to kafka side of the system
 public class TestAbstractDocumentFrequencyUpdateEventListener extends SolrTestCaseJ4 {
@@ -92,7 +91,6 @@ public class TestAbstractDocumentFrequencyUpdateEventListener extends SolrTestCa
     public void cleanup() throws Exception {
         h.getCoreContainer().shutdown();
         updateEventListener.cleanup();
-        Metrics.shutdown();
     }
 
     public void clearIndex() {
