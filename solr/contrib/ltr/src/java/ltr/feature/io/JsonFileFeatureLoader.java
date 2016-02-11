@@ -2,6 +2,7 @@ package ltr.feature.io;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.Map;
 
@@ -26,7 +27,8 @@ import org.slf4j.LoggerFactory;
 public class JsonFileFeatureLoader {
 
   private static final Logger logger = LoggerFactory
-      .getLogger(JsonFileFeatureLoader.class);
+      .getLogger(MethodHandles
+          .lookup().lookupClass());
 
   public JsonFileFeatureLoader() {}
 
@@ -46,7 +48,8 @@ public class JsonFileFeatureLoader {
     final JSONParser parser = new JSONParser(reader);
     final Object b = ObjectBuilder.getVal(parser);
     if (!(b instanceof Map)) {
-      return;
+      logger.error("invalid json feature file, cannot load the features");
+      throw new FeatureException("invalid json feature file, cannot load the features");
     }
     @SuppressWarnings("unchecked")
     final Map<String,Object> params = (Map) b;
@@ -64,14 +67,15 @@ public class JsonFileFeatureLoader {
       final List<Object> featureList = (List) params
           .get(CommonLtrParams.FEATURE_FIELD);
       int featureId = 0;
-      for (final Object o : featureList) {
-        final Feature f = this.getFeature(o, featureId);
-        if (f != null) {
-          store.add(f);
+      for (final Object featureObj : featureList) {
+        final Feature feature = this.getFeature(featureObj, featureId);
+        if (feature != null) {
+          store.add(feature);
           ++featureId;
         } else {
-          logger.error("cannot load feature {}, store {}", o,
+          logger.error("cannot load feature {}, store {}", featureObj,
               store.getStoreName());
+          throw new FeatureException("cannot load feature: "+featureObj+" feature store "+store.getStoreName());
         }
       }
     }
@@ -85,6 +89,24 @@ public class JsonFileFeatureLoader {
     final Map map = (Map) o;
     final String name = (String) map.get(CommonLtrParams.FEATURE_NAME);
     final String type = (String) map.get(CommonLtrParams.FEATURE_TYPE);
+    final Object objDefaultValue = map.get(CommonLtrParams.FEATURE_DEFAULT);
+
+    Float defaultValue = null;
+
+    if (objDefaultValue == null){
+      logger.warn("default value for feature {}, not specified, setting to {}", name, CommonLtrParams.FEATURE_DEFAULT_VALUE);
+      defaultValue = CommonLtrParams.FEATURE_DEFAULT_VALUE;
+    }
+    else if (objDefaultValue instanceof Float){
+      defaultValue = (Float)objDefaultValue;
+    }
+    else if (objDefaultValue instanceof Double){
+      defaultValue = ((Double)objDefaultValue).floatValue();
+    }
+    else {
+      logger.warn("cannot parse value for feature {}, setting to {}", name, CommonLtrParams.FEATURE_DEFAULT_VALUE);
+      defaultValue = CommonLtrParams.FEATURE_DEFAULT_VALUE;
+    }
 
     NamedParams params = null;
 
@@ -96,7 +118,7 @@ public class JsonFileFeatureLoader {
     }
 
     try {
-      return this.createFeature(name, type, params, id);
+      return this.createFeature(name, type, params, id, defaultValue);
     } catch (final FeatureException e) {
       logger.error("loading feature: {} \n{} ",name, e);
       return null;
@@ -113,14 +135,14 @@ public class JsonFileFeatureLoader {
    * @param params
    *          input params for the feature
    * @param id
-   *          - unique int identifier for the feature
+   *          unique int identifier for the feature
    */
   private Feature createFeature(final String name, final String type,
-      final NamedParams params, final int id) throws FeatureException {
+      final NamedParams params, final int id, final float defaultValue) throws FeatureException {
     try {
       final Class<?> c = Class.forName(type);
       final Feature f = (Feature) c.newInstance();
-      f.init(name, params, id);
+      f.init(name, params, id, defaultValue);
       return f;
     } catch (final Exception e) {
       logger.error("creating feature {} \n {}",name, e);

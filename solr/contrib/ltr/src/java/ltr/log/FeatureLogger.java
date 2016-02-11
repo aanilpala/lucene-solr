@@ -1,5 +1,6 @@
 package ltr.log;
 
+import java.lang.invoke.MethodHandles;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -20,7 +21,8 @@ public abstract class FeatureLogger<RECORD> {
   }
 
   private static final Logger logger = LoggerFactory
-      .getLogger(FeatureLogger.class);
+      .getLogger(MethodHandles
+          .lookup().lookupClass());
 
   public FeatureLogger(final int numDocsToRerank) {
     this.docIdToFeatures = new HashMap<>(numDocsToRerank);

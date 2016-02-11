@@ -1,13 +1,12 @@
 package ltr.feature.impl;
 
 import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 import java.util.HashSet;
 import java.util.Set;
 
 import ltr.feature.norm.Normalizer;
 import ltr.ranking.Feature;
-import ltr.ranking.FeatureScorer;
-import ltr.ranking.FeatureWeight;
 import ltr.util.CommonLtrParams;
 import ltr.util.FeatureException;
 import ltr.util.NamedParams;
@@ -23,9 +22,9 @@ import org.slf4j.LoggerFactory;
 /**
  * This feature will return the number of terms in a query referring to a
  * particular type. For example the query:
- * 
+ *
  * topic.US topic.UK person.OBAMA
- * 
+ *
  * has two terms referring to the type 'topic', and one referring to the type
  * person. This is done by specifying the 'querytype' in the feature parameters
  * (eg. "querytype":"topic"), the feature will extract the terms from the query
@@ -34,38 +33,44 @@ import org.slf4j.LoggerFactory;
  */
 public class QueryTypeFeature extends Feature {
 
-  private static final Logger logger = LoggerFactory.getLogger(QueryTypeFeature.class);
+  private static final Logger logger = LoggerFactory.getLogger(MethodHandles
+      .lookup().lookupClass());
 
-  String querytype = null;
+  private String querytype;
 
   public QueryTypeFeature() {
 
   }
 
-  public void init(String name, NamedParams params, int id) throws FeatureException {
-    super.init(name, params, id);
+  @Override
+  public void init(final String name, final NamedParams params, final int id,
+      final float defaultValue) throws FeatureException {
+    super.init(name, params, id, defaultValue);
     if (!params.containsKey(CommonLtrParams.QUERY_TYPE)) {
       throw new FeatureException("missing param " + CommonLtrParams.QUERY_TYPE);
     }
   }
 
   @Override
-  public FeatureWeight createWeight(IndexSearcher searcher) throws IOException {
-    this.querytype = (String) params.get(CommonLtrParams.QUERY_TYPE);
-    return new QueryTypeWeight(searcher, name, params, norm, id);
+  public FeatureWeight createWeight(final IndexSearcher searcher)
+      throws IOException {
+    this.querytype = (String) this.params.get(CommonLtrParams.QUERY_TYPE);
+    return new QueryTypeWeight(searcher, this.name, this.params, this.norm,
+        this.id);
   }
 
   @Override
   public String toString() {
-    return "QueryTypeFeature [querytype:" + querytype + "]";
+    return "QueryTypeFeature [querytype:" + this.querytype + "]";
   }
 
   public class QueryTypeWeight extends FeatureWeight {
 
-    Set<Term> terms = new HashSet<>();
-    float queryTypeFreq = 0;
+    private final Set<Term> terms = new HashSet<>();
+    private float queryTypeFreq = 0;
 
-    public QueryTypeWeight(IndexSearcher searcher, String name, NamedParams params, Normalizer norm, int id) {
+    public QueryTypeWeight(final IndexSearcher searcher, final String name,
+        final NamedParams params, final Normalizer norm, final int id) {
       super(searcher, name, params, norm, id);
     }
 
@@ -74,41 +79,42 @@ public class QueryTypeFeature extends Feature {
       return QueryTypeFeature.this;
     }
 
-    public void setOriginalQuery(Query originalQuery) {
+    @Override
+    public void setOriginalQuery(final Query originalQuery) {
       if (originalQuery != null) {
-        originalQuery.extractTerms(terms);
-        for (Term term : terms) {
-          String text = term.text();
-          if (text.startsWith(querytype))
-            queryTypeFreq++;
+        originalQuery.extractTerms(this.terms);
+        for (final Term term : this.terms) {
+          final String text = term.text();
+          if ((text != null) && text.startsWith(QueryTypeFeature.this.querytype)) {
+            this.queryTypeFreq++;
+          }
         }
       } else {
-        queryTypeFreq = -1;
+        this.queryTypeFreq = QueryTypeFeature.this.defaultValue;
       }
     };
 
     @Override
-    public FeatureScorer scorer(AtomicReaderContext context, Bits acceptDocs) throws IOException {
-      return new QueryTypeScorer(this, context);
+    public FeatureScorer scorer(final AtomicReaderContext context,
+        final Bits acceptDocs) throws IOException {
+      return new QueryTypeScorer(this);
     }
 
     public class QueryTypeScorer extends FeatureScorer {
 
-      AtomicReaderContext context = null;
-
-      public QueryTypeScorer(FeatureWeight weight, AtomicReaderContext context) {
+      public QueryTypeScorer(final FeatureWeight weight) {
         super(weight);
-        this.context = context;
       }
 
       @Override
       public float score() {
-        return queryTypeFreq;
+        return QueryTypeWeight.this.queryTypeFreq;
       }
 
       @Override
       public String toString() {
-        return "QueryTypeScorer [name=" + name + " querytype=" + querytype + " ]";
+        return "QueryTypeScorer [name=" + this.name + " querytype="
+            + QueryTypeFeature.this.querytype + " ]";
       }
 
     }

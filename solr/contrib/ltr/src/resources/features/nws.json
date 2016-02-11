@@ -7,7 +7,8 @@
             "fq": "recip(mul(story_importance_decay_value,ms(NOW/HOUR,time_of_arrival)),3.17e-11,2,1)"
         }, 
         "name": "boost1", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.FunctionQueryFeature", 
@@ -15,7 +16,8 @@
             "fq": "mul(sub(255,story_importance_score),0.01)"
         }, 
         "name": "boost2", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.StoryAgeFeature", 
@@ -24,7 +26,7 @@
             "granularity": "days"
         }, 
         "name": "story_age_days", 
-        "store": "nws6"
+        "store": "nws"
     }, 
     {
         "type": "ltr.feature.impl.StoryAgeFeature", 
@@ -33,7 +35,7 @@
             "granularity": "hours"
         }, 
         "name": "story_age_hours", 
-        "store": "nws6"
+        "store": "nws"
     }, 
     {
         "type": "ltr.feature.impl.StoryAgeFeature", 
@@ -42,7 +44,7 @@
             "granularity": "minutes"
         }, 
         "name": "story_age_minutes", 
-        "store": "nws6"
+        "store": "nws"
     }, 
     {
         "type": "ltr.feature.impl.StoryAgeFeature", 
@@ -51,7 +53,7 @@
             "granularity": "seconds"
         }, 
         "name": "story_age_seconds", 
-        "store": "nws6"
+        "store": "nws"
     }, 
     {
         "type": "ltr.feature.impl.FieldValueFeature", 
@@ -59,7 +61,8 @@
             "field": "story_importance_score"
         }, 
         "name": "story_importance_score", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.FieldValueFeature", 
@@ -67,7 +70,8 @@
             "field": "story_importance_decay_value"
         }, 
         "name": "story_importance_decay_value", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.StoryAgeFeature", 
@@ -76,7 +80,7 @@
             "granularity": "days"
         }, 
         "name": "time_of_update_days", 
-        "store": "nws6"
+        "store": "nws"
     }, 
     {
         "type": "ltr.feature.impl.StoryAgeFeature", 
@@ -85,7 +89,7 @@
             "granularity": "hours"
         }, 
         "name": "time_of_update_hours", 
-        "store": "nws6"
+        "store": "nws"
     }, 
     {
         "type": "ltr.feature.impl.StoryAgeFeature", 
@@ -94,7 +98,7 @@
             "granularity": "minutes"
         }, 
         "name": "time_of_update_minutes", 
-        "store": "nws6"
+        "store": "nws"
     }, 
     {
         "type": "ltr.feature.impl.StoryAgeFeature", 
@@ -103,7 +107,7 @@
             "granularity": "seconds"
         }, 
         "name": "time_of_update_seconds", 
-        "store": "nws6"
+        "store": "nws"
     }, 
     {
         "type": "ltr.feature.impl.HasFieldFeature", 
@@ -111,7 +115,7 @@
             "field": "attachment_type"
         }, 
         "name": "has_attachment", 
-        "store": "nws6"
+        "store": "nws"
     }, 
     {
         "type": "ltr.feature.impl.FieldCharLengthFeature", 
@@ -119,7 +123,7 @@
             "field": "headline"
         }, 
         "name": "headline_char_length", 
-        "store": "nws6"
+        "store": "nws"
     }, 
     {
         "type": "ltr.feature.impl.MultivaluedFieldLengthFeature", 
@@ -127,7 +131,8 @@
             "field": "content"
         }, 
         "name": "number_of_topics", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.MultivaluedFieldLengthFeature", 
@@ -135,7 +140,8 @@
             "field": "source"
         }, 
         "name": "number_of_sources", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.FieldValueFeature", 
@@ -143,7 +149,8 @@
             "field": "is_ppv"
         }, 
         "name": "is_ppv", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.FieldValueFeature", 
@@ -151,7 +158,8 @@
             "field": "is_market_mover"
         }, 
         "name": "is_market_mover", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.FieldValueFeature", 
@@ -159,7 +167,8 @@
             "field": "is_exclusive"
         }, 
         "name": "is_exclusive", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.FieldValueFeature", 
@@ -167,7 +176,8 @@
             "field": "hot_level"
         }, 
         "name": "hot_level", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.FieldValueFeature", 
@@ -175,7 +185,8 @@
             "field": "topic_cluster_size"
         }, 
         "name": "topic_cluster_size", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.QueryTypeFeature", 
@@ -183,7 +194,8 @@
             "querytype": "topic"
         }, 
         "name": "query_has_topic", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.QueryTypeFeature", 
@@ -191,7 +203,8 @@
             "querytype": "person"
         }, 
         "name": "query_has_person", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.QueryTypeFeature", 
@@ -199,7 +212,8 @@
             "querytype": "region"
         }, 
         "name": "query_has_region", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.QueryTypeFeature", 
@@ -207,7 +221,8 @@
             "querytype": "keyword"
         }, 
         "name": "query_has_keyword", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.QueryTypeFeature", 
@@ -215,7 +230,8 @@
             "querytype": "industry"
         }, 
         "name": "query_has_industry", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.QueryTypeFeature", 
@@ -223,7 +239,8 @@
             "querytype": "company"
         }, 
         "name": "query_has_company", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }, 
     {
         "type": "ltr.feature.impl.QueryTypeFeature", 
@@ -231,7 +248,8 @@
             "querytype": "wire"
         }, 
         "name": "query_has_wire", 
-        "store": "nws6"
+        "store": "nws",
+        "default": 0.0
     }
 ]
 }

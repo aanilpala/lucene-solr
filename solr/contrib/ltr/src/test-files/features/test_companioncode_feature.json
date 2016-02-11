@@ -12,7 +12,8 @@
              },
             "field":"content"
         }, 
-        "name": "companion"
+        "name": "companion",
+        "default":0.0
     },
     {
         "type": "ltr.feature.impl.CompanionCodeFeature", 
@@ -25,7 +26,8 @@
              },
             "field":"content"
         }, 
-        "name": "companion2"
+        "name": "companion2",
+        "default":-1.0
     } 
 ]
 }

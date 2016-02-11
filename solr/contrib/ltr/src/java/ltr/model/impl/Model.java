@@ -1,6 +1,7 @@
 package ltr.model.impl;
 
 import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -8,12 +9,13 @@ import java.util.Map;
 
 import ltr.feature.FeatureStore;
 import ltr.feature.ModelMetadata;
+import ltr.feature.impl.ConstantFeature;
 import ltr.feature.norm.Normalizer;
 import ltr.feature.norm.impl.IdentityNormalizer;
 import ltr.log.FeatureLogger;
 import ltr.ranking.Feature;
-import ltr.ranking.FeatureScorer;
-import ltr.ranking.FeatureWeight;
+import ltr.ranking.Feature.FeatureWeight;
+import ltr.ranking.Feature.FeatureWeight.FeatureScorer;
 import ltr.util.ModelException;
 
 import org.apache.lucene.index.AtomicReaderContext;
@@ -24,6 +26,8 @@ import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.Bits;
 import org.apache.solr.request.SolrQueryRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A learned model, given a document context and a list of features predict a
@@ -36,6 +40,9 @@ public abstract class Model extends Query {
 
   // contains a description of the model
   protected ModelMetadata meta;
+
+  private static final Logger logger = LoggerFactory.getLogger(MethodHandles
+      .lookup().lookupClass());
 
   // feature logger to output the features.
   private FeatureLogger<?> fl = FeatureLogger.getFeatureLogger(
@@ -175,18 +182,26 @@ public abstract class Model extends Query {
 
   protected FeatureWeight[] getWeights(final Collection<Feature> features,
       final IndexSearcher searcher) throws IOException {
-    final FeatureWeight[] arr = new FeatureWeight[features.size()];
+    final FeatureWeight[] featureWeights = new FeatureWeight[features.size()];
     final SolrQueryRequest req = this.getRequest();
-    int i = 0;
+    int featureId = 0;
     // since the feature store is a linkedhashmap order is preserved
     for (final Feature f : features) {
-      arr[i] = f.createWeight(searcher);
-      arr[i].setRequest(req);
-      arr[i].setOriginalQuery(this.originalQuery);
+      try {
+        featureWeights[featureId] = f.createWeight(searcher);
+        featureWeights[featureId].setRequest(req);
+        featureWeights[featureId].setOriginalQuery(this.originalQuery);
+      } catch (final Exception e) {
+        logger.error("computing weight for feature {} - {}", f.getName(), e);
+        // in case of error we return always the same constant value for this feauture
+        final ConstantFeature constantFeature = new ConstantFeature();
+        constantFeature.setValue(f.getDefaultValue());
+        featureWeights[featureId] = constantFeature.createWeight(searcher);
+      }
 
-      ++i;
+      ++featureId;
     }
-    return arr;
+    return featureWeights;
   }
 
   @Override
@@ -207,6 +222,7 @@ public abstract class Model extends Query {
     // features used for logging.
     private final FeatureWeight[] modelFeatures;
     private final float[] modelFeatureValuesNormalized;
+    protected final float[] defaultValues;
 
     // List of all the feature values, used for both scoring and logging
     private final FeatureWeight[] allFeatureWeights;
@@ -231,10 +247,12 @@ public abstract class Model extends Query {
       this.modelFeatures = modelFeatures;
       this.modelFeatureValuesNormalized = new float[modelFeatures.length];
       this.allFeatureValues = new float[allFeatures.length];
+      this.defaultValues = new float[allFeatures.length];
       this.allFeatureNames = new String[allFeatures.length];
 
-      for (int i = 0; i < allFeatures.length; ++i) {
-        this.allFeatureNames[i] = allFeatures[i].getName();
+      for (int featureId = 0; featureId < allFeatures.length; ++featureId) {
+        this.allFeatureNames[featureId] = allFeatures[featureId].getName();
+        this.defaultValues[featureId] = allFeatures[featureId].getDefaultValue();
       }
     }
 
@@ -271,12 +289,12 @@ public abstract class Model extends Query {
      * values for all the features that will be used for scoring.
      */
     public void normalize() {
-      int pos = 0;
+      int featureId = 0;
       for (final FeatureWeight feature : this.modelFeatures) {
         final Normalizer norm = feature.getNorm();
-        this.modelFeatureValuesNormalized[pos] = norm
+        this.modelFeatureValuesNormalized[featureId] = norm
             .normalize(this.allFeatureValues[feature.getId()]);
-        pos++;
+        featureId++;
       }
     }
 
@@ -286,10 +304,10 @@ public abstract class Model extends Query {
       final FeatureScorer[] featureScorers = new FeatureScorer[this.allFeatureValues.length];
 
       final Explanation[] explanations = new Explanation[this.allFeatureValues.length];
-      int index = 0;
+      int featureId = 0;
       for (final FeatureWeight feature : this.allFeatureWeights) {
-        featureScorers[index] = feature.scorer(context, null);
-        explanations[index++] = feature.explain(context, doc);
+        featureScorers[featureId] = feature.scorer(context, null);
+        explanations[featureId++] = feature.explain(context, doc);
       }
 
       final List<Explanation> featureExplanations = new ArrayList<>();
@@ -306,11 +324,8 @@ public abstract class Model extends Query {
       // diego: no need to advance, scorers here will be in the required
       // position
       bs.advance(doc);
-
       final float finalScore = bs.score();
-
       return Model.this.explain(context, doc, finalScore, featureExplanations);
-
     }
 
     @Override
@@ -335,9 +350,16 @@ public abstract class Model extends Query {
         final PostingFeatures features, final Bits acceptDocs)
             throws IOException {
       final FeatureScorer[] featureScorers = new FeatureScorer[this.allFeatureWeights.length];
-      for (int i = 0; i < this.allFeatureWeights.length; i++) {
-        featureScorers[i] = this.allFeatureWeights[i].scorer(context,
-            acceptDocs);
+      for (int featureId = 0; featureId < this.allFeatureWeights.length; featureId++) {
+        try {
+          featureScorers[featureId] = this.allFeatureWeights[featureId].scorer(context,
+              acceptDocs);
+        } catch (final Exception e) {
+          // if scorer() throws an exception we set the scorer to null
+          logger.error("computing feature {} ", this.allFeatureNames[featureId]);
+
+          featureScorers[featureId] = null;
+        }
       }
       return this.makeModelScorer(this, featureScorers);
     }
@@ -346,11 +368,11 @@ public abstract class Model extends Query {
         FeatureScorer[] featureScorers);
 
     /**
-     * A model scorer will take a list of {@link FeatureScorer} and it will apply to
-     * a give document in order to generate the its feature values. A concrete learning
-     * to rank scorer will have to extend this and implement the method score() in order
-     * in order to access the feature values and combine them in a final score.
-     * {@link LoggingModel}.
+     * A model scorer will take a list of {@link FeatureScorer} and it will
+     * apply to a give document in order to generate the its feature values. A
+     * concrete learning to rank scorer will have to extend this and implement
+     * the method score() in order in order to access the feature values and
+     * combine them in a final score. {@link LoggingModel}.
      */
     public abstract class ModelScorer extends Scorer {
 

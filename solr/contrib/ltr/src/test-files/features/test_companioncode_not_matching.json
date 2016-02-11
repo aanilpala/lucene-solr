@@ -9,6 +9,7 @@
              },
             "field":"content"
         }, 
+        "default":0.0,
         "name": "companion"
     }
 ]

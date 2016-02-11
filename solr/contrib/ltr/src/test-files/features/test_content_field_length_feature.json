@@ -6,7 +6,8 @@
         "name": "content_length",
         "params": {
           "field": "content"
-        }
+        },
+        "default":0.0
         
     }
 ]

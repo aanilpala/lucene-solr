@@ -4,7 +4,6 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 
 import ltr.ranking.Feature;
-import ltr.util.FeatureException;
 import ltr.util.LtrException;
 
 /**
@@ -20,18 +19,18 @@ public class FeatureStore {
   public static final float NO_VERSION = -1;
   // current version for this feature store (null means no version declared)
   private float version = NO_VERSION;
-  
+
   /**
    * @return the storeName
    */
   public String getStoreName() {
     return this.storeName;
   }
-  
+
   public boolean isEmpty() {
     return this.store.isEmpty();
   }
-  
+
   /**
    * Create a new feature store with the given name
    *
@@ -41,33 +40,15 @@ public class FeatureStore {
   public FeatureStore(final String storeName) {
     this.storeName = storeName;
   }
-  
-  /**
-   * Return the feature with the given name, if the feature is contained in this
-   * feature store, otherwise throws a FeatureException
-   *
-   * @param name
-   *          - the name of the feature
-   * @return the feature object implementing the logic for producing the feature
-   * @throws FeatureException
-   *           if the feature was not registered in this store
-   */
-  public Feature get(final String name) throws FeatureException {
-    if (!this.store.containsKey(name)) {
-      throw new FeatureException("missing feature " + name
-          + ". Store name was: " + this.storeName
-          + "Possibly this feature exists in another context.");
-    }
-    return this.store.get(name);
-  }
-  
+
+
   /**
    * @return the size of this feature store
    */
   public int size() {
     return this.store.size();
   }
-  
+
   /**
    * @param name
    *          the name of a feature
@@ -76,7 +57,7 @@ public class FeatureStore {
   public boolean containsFeature(final String name) {
     return this.store.containsKey(name);
   }
-  
+
   /**
    * add the a feature to this store
    *
@@ -86,22 +67,22 @@ public class FeatureStore {
   public void add(final Feature feature) {
     this.store.put(feature.getName(), feature);
   }
-  
+
   /**
    * @return all the features in this store, sorted by insertion order
    */
   public Collection<Feature> getFeatures() {
     return this.store.values();
   }
-  
+
   /**
    * removes all the features registered in this feature store
    */
   public void clear() {
     this.store.clear();
-    
+
   }
-  
+
   /**
    * set the current version of this feature store
    *
@@ -116,7 +97,7 @@ public class FeatureStore {
     }
     this.version = version;
   }
-  
+
   /**
    * returns the current version for this feature store
    *
@@ -125,5 +106,5 @@ public class FeatureStore {
   public float getVersion() {
     return this.version;
   }
-  
+
 }

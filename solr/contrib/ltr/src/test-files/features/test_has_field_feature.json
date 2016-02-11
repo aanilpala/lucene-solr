@@ -14,7 +14,8 @@
         "name": "has_description",
         "params":{
           "field": "description"
-        }
+        },
+        "default":-1.0
     }
 ]
 }

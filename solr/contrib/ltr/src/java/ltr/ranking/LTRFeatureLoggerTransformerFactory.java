@@ -1,6 +1,7 @@
 package ltr.ranking;
 
 import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 import java.util.List;
 
 import ltr.feature.FeatureStore;
@@ -9,7 +10,7 @@ import ltr.log.FeatureLogger;
 import ltr.model.impl.LoggingModel;
 import ltr.model.impl.Model;
 import ltr.model.impl.Model.ModelWeight;
-import ltr.util.FeatureException;
+import ltr.util.CommonLtrParams;
 
 import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.ReaderUtil;
@@ -18,8 +19,6 @@ import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.Weight.PostingFeatures;
 import org.apache.solr.common.SolrDocument;
-import org.apache.solr.common.SolrException;
-import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.SolrResourceLoader;
@@ -40,28 +39,26 @@ import org.slf4j.LoggerFactory;
 
 public class LTRFeatureLoggerTransformerFactory extends TransformerFactory {
   
-  private static final String FEATURE_STORE_PARAM = "model";
-  private static final String DEFAULT_FEATURE_STORE = "nws";
+  private static final Logger logger = LoggerFactory.getLogger(MethodHandles
+      .lookup().lookupClass());
   
-  private static final Logger logger = LoggerFactory
-      .getLogger(LTRFeatureLoggerTransformerFactory.class);
-  
-  private LocalFeatureStores stores = null;
+  private final LocalFeatureStores stores = new LocalFeatureStores();
   
   @Override
   public void init(@SuppressWarnings("rawtypes") final NamedList args) {
     super.init(args);
-    this.stores = new LocalFeatureStores();
   }
   
   @Override
   public DocTransformer create(final String name, final SolrParams params,
       final SolrQueryRequest req) {
+    // this will be created at each request
     final SolrResourceLoader solrResourceLoader = req.getCore()
         .getResourceLoader();
     final IndexSearcher searcher = req.getSearcher();
-    final String featureStoreName = params.get(FEATURE_STORE_PARAM,
-        DEFAULT_FEATURE_STORE);
+    final String featureStoreName = params.get(
+        CommonLtrParams.FEATURE_STORE_PARAM,
+        CommonLtrParams.DEFAULT_FEATURE_STORE);
     Model featureStoreModel = null;
     try {
       
@@ -69,11 +66,31 @@ public class LTRFeatureLoggerTransformerFactory extends TransformerFactory {
           .getFeatureStoreFromSolrConfigOrResources(featureStoreName,
               solrResourceLoader);
       featureStoreModel = new LoggingModel(featureStore);
-    } catch (final FeatureException e) {
+    } catch (final Exception e) {
       logger.error("retrieving the feature store {}\n{}", featureStoreName, e);
-      return null;
+      return new EmptyFeatureTrasformer(name);
     }
     return new FeatureTransformer(name, searcher, featureStoreModel);
+  }
+  
+  class EmptyFeatureTrasformer extends TransformerWithContext {
+    private final String name;
+    
+    public EmptyFeatureTrasformer(final String name) {
+      this.name = name;
+    }
+    
+    @Override
+    public String getName() {
+      return this.name;
+    }
+    
+    @Override
+    public void transform(final SolrDocument doc, final int docid)
+        throws IOException {
+      doc.addField(this.name, "cannot produce feature vector");
+    }
+    
   }
   
   class FeatureTransformer extends TransformerWithContext {
@@ -116,8 +133,8 @@ public class LTRFeatureLoggerTransformerFactory extends TransformerFactory {
       }
       
       if (this.reRankModel == null) {
-        throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
-            "model is null");
+        logger.error(CommonLtrParams.FEATURE_ERROR);
+        return;
       }
       this.reRankModel.setRequest(context.req);
       this.reRankModel.setOriginalQuery(context.query);
@@ -125,22 +142,20 @@ public class LTRFeatureLoggerTransformerFactory extends TransformerFactory {
       this.featurelLogger = this.reRankModel.getFeatureLogger();
       final IndexSearcher searcher = context.searcher;
       if (searcher == null) {
-        throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
-            "searcher is null");
+        logger.error(CommonLtrParams.FEATURE_ERROR);
+        return;
       }
       this.leafContexts = searcher.getTopReaderContext().leaves();
-      Weight w;
+      Weight w = null;
       try {
         w = this.reRankModel.createWeight(searcher);
       } catch (final IOException e) {
-        // FIXME throw exception?
-        throw new SolrException(ErrorCode.BAD_REQUEST,
-            "error logging the features");
+        logger.error(CommonLtrParams.FEATURE_ERROR);
+        return;
       }
       if ((w == null) || !(w instanceof ModelWeight)) {
-        // FIXME throw exception?
-        throw new SolrException(ErrorCode.BAD_REQUEST,
-            "error logging the features");
+        logger.error(CommonLtrParams.FEATURE_ERROR);
+        return;
       }
       this.modelWeight = (ModelWeight) w;
     }
@@ -149,14 +164,19 @@ public class LTRFeatureLoggerTransformerFactory extends TransformerFactory {
     public void transform(final SolrDocument doc, final int docid)
         throws IOException {
       // Note: this is the entry point of the computation of the features.
-      // at the moment features are computed here solr 4.8.1 does not support reranking
-      // name. so we cannot recompute the score for each document during the reranking here.
-      
+      // at the moment features are computed here solr 4.8.1 does not support
+      // reranking
+      // name. so we cannot recompute the score for each document during the
+      // reranking here.
+      if (this.modelWeight == null) {
+        doc.addField(this.name, CommonLtrParams.FEATURE_ERROR);
+        return;
+      }
       final int n = ReaderUtil.subIndex(docid, this.leafContexts);
       final AtomicReaderContext atomicContext = this.leafContexts.get(n);
       final int deBasedDoc = docid - atomicContext.docBase;
       final Scorer r = this.modelWeight.scorer(atomicContext,
-          PostingFeatures.DOCS_AND_FREQS, null);
+          PostingFeatures.DOCS_AND_FREQS,null);
       
       if (r.advance(deBasedDoc) != deBasedDoc) {
         logger.info("cannot find doc {} = {}", docid, doc);

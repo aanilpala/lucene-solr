@@ -51,17 +51,12 @@ public class LocalFeatureStores {
    */
   private FeatureStore loadStore(final String featureStoreName,
       final Reader featureStoreReader) {
-    if (this.stores.containsKey(featureStoreName)) {
-      return this.stores.get(featureStoreName);
-    }
     final FeatureStore featureStore = new FeatureStore(featureStoreName);
     try {
       this.loader.loadFeatures(featureStoreReader, featureStore);
     } catch (final IOException e) {
       logger.error("loading the feature store {}: {}", featureStoreName, e);
     }
-    
-    this.stores.put(featureStoreName, featureStore);
     return featureStore;
   }
   
@@ -104,6 +99,10 @@ public class LocalFeatureStores {
   private FeatureStore getFeatureStoreFromSolr(
       final String featureStoreDirectory, final String featureStoreName,
       final SolrResourceLoader solrResourceLoader) {
+    // check if the store is in the cache
+    if (this.stores.containsKey(featureStoreName)) {
+      return this.stores.get(featureStoreName);
+    }
     FeatureStore featureStore = new FeatureStore(featureStoreName);
     
     final String featureStorePath = (featureStoreDirectory == null) ? featureStoreName
@@ -113,11 +112,13 @@ public class LocalFeatureStores {
       try (Reader featureStoreReader = new InputStreamReader(is)) {
         featureStore = this.loadStore(featureStoreName, featureStoreReader);
       }
-      
-    } catch (final IOException e) {
+      // add the store in the cache
+      this.stores.put(featureStoreName, featureStore);
+
+    } catch (final Exception e) {
       logger.error("loading feature store in {}: \n{} ",featureStorePath, e);
     }
-    
+    // in case of error feature store will be empty
     return featureStore;
     
   }

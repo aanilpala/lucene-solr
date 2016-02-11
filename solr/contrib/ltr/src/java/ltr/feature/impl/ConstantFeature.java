@@ -4,8 +4,6 @@ import java.io.IOException;
 
 import ltr.feature.norm.Normalizer;
 import ltr.ranking.Feature;
-import ltr.ranking.FeatureScorer;
-import ltr.ranking.FeatureWeight;
 import ltr.util.CommonLtrParams;
 import ltr.util.NamedParams;
 
@@ -15,7 +13,7 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.util.Bits;
 
 /**
- * This feature will produce a constant value for each document. 
+ * This feature will produce a constant value for each document.
  * The value can be passed by setting the param "value" into the configuration.
  */
 public class ConstantFeature extends Feature {
@@ -32,7 +30,7 @@ public class ConstantFeature extends Feature {
    * @return the value
    */
   public float getValue() {
-    return value;
+    return this.value;
   }
 
 
@@ -40,21 +38,21 @@ public class ConstantFeature extends Feature {
   /**
    * @param value the value to set
    */
-  public void setValue(float value) {
+  public void setValue(final float value) {
     this.value = value;
   }
 
 
 
   @Override
-  public FeatureWeight createWeight(IndexSearcher searcher) throws IOException {
-    value = params.getFloat(CommonLtrParams.VALUE, value);
-    return new ConstantFeatureWeight(searcher, name, params, norm, id);
+  public FeatureWeight createWeight(final IndexSearcher searcher) throws IOException {
+    this.value = this.params.getFloat(CommonLtrParams.VALUE, this.value);
+    return new ConstantFeatureWeight(searcher, this.name, this.params, this.norm, this.id);
   }
 
   public class ConstantFeatureWeight extends FeatureWeight {
 
-    public ConstantFeatureWeight(IndexSearcher searcher, String name, NamedParams params, Normalizer norm, int id) {
+    public ConstantFeatureWeight(final IndexSearcher searcher, final String name, final NamedParams params, final Normalizer norm, final int id) {
       super(searcher, name, params, norm, id);
     }
 
@@ -64,8 +62,8 @@ public class ConstantFeature extends Feature {
     }
 
     @Override
-    public FeatureScorer scorer(AtomicReaderContext context, Bits acceptDocs) throws IOException {
-      return new ConstantFeatureScorer(this, value, "ConstantFeature");
+    public FeatureScorer scorer(final AtomicReaderContext context, final Bits acceptDocs) throws IOException {
+      return new ConstantFeatureScorer(this, ConstantFeature.this.value, "ConstantFeature");
     }
 
   }

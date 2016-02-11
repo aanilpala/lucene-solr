@@ -4,6 +4,7 @@
     {
         "type": "ltr.feature.impl.FieldCharLengthFeature", 
         "name": "content_char_length",
+        "default":0.0,
         "params": {
           "field": "content"
         }
