@@ -25,7 +25,9 @@ import java.net.SocketAddress;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 
+import org.apache.zookeeper.data.Stat;
 import org.apache.zookeeper.ClientCnxn;
+import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooKeeper;
 
@@ -94,6 +96,15 @@ public class SolrZooKeeper extends ZooKeeper {
     };
     spawnedThreads.add(t);
     t.start();
+  }
+
+  @Override
+  public Stat setData(final String path, final byte data[], final int version)
+    throws KeeperException, InterruptedException {
+    log.debug("Calling Zookeeper setData ...");
+    final Stat stat = super.setData(path, data, version);
+    log.debug("... called ZooKeeper setData.");
+    return stat;
   }
 
   @Override
