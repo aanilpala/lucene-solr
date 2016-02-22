@@ -35,7 +35,7 @@ public class RepeatingTokenFilter extends TokenFilter {
     }
 
     @Override
-    public boolean incrementToken() throws IOException {
+    public final boolean incrementToken() throws IOException {
         if (repeatCount == -1) {
             if (input.incrementToken()) {
                 final char[] buffer = termAtt.buffer();
