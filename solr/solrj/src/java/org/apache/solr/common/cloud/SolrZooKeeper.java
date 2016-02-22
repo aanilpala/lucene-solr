@@ -101,8 +101,10 @@ public class SolrZooKeeper extends ZooKeeper {
   @Override
   public Stat setData(final String path, final byte data[], final int version)
     throws KeeperException, InterruptedException {
-    log.debug("Calling Zookeeper setData ...");
+    log.debug("Calling ZooKeeper setData ...");
+    log.debug("ZooKeeper.cnxn = "+cnxn.toString());
     final Stat stat = super.setData(path, data, version);
+    log.debug("ZooKeeper.cnxn = "+cnxn.toString());
     log.debug("... called ZooKeeper setData.");
     return stat;
   }
