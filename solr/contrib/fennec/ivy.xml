@@ -19,7 +19,7 @@
 <ivy-module version="2.0">
     <info organisation="org.apache.solr" module="fennec"/>
     <dependencies>
-        <dependency org="org.apache.kafka" name="kafka-clients" rev="0.8.2.2"/>
+        <dependency org="com.rabbitmq" name="amqp-client" rev="3.6.0"/>
         <dependency org="com.bloomberg.news" name="fennec-common" rev="1.1.0">
             <artifact name="fennec-common" ext="jar"/>
         </dependency>

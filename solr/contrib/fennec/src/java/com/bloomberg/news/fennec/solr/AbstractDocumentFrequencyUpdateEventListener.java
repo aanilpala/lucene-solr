@@ -200,7 +200,7 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
         this.executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 
         // We need to add a close hook to Solr because we need to shutdown our executor service
-        registerCloseHook();
+        registerCloseHook(new EventListenerCloseHook());
        
         cloudDescriptor = core.getCoreDescriptor().getCloudDescriptor();
         
@@ -313,8 +313,8 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
     /**
      * Method registers a close hook to the solr core to shutdown the executor service
      */
-    protected void registerCloseHook() {
-        this.getCore().addCloseHook(new EventListenerCloseHook());
+    protected void registerCloseHook(final CloseHook closeHook) {
+        this.getCore().addCloseHook(closeHook);
     }
     
     synchronized Long getPreviousSuccessfulDiffTime() {
