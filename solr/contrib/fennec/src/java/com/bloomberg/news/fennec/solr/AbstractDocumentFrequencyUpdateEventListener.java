@@ -75,7 +75,7 @@ abstract public class AbstractDocumentFrequencyUpdateEventListener extends Abstr
     protected ThreadPoolExecutor executor;
     
     private final CloudDescriptor cloudDescriptor;
-    private final String collectionName;
+    protected final String collectionName;
     private final String shardId;
     
     private Long previousSuccessfulDiffTime;
