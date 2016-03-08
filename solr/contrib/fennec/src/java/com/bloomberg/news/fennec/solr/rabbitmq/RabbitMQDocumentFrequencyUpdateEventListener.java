@@ -157,9 +157,11 @@ public class RabbitMQDocumentFrequencyUpdateEventListener extends AbstractDocume
             final String fieldName = entry.getKey();
             final List<DocumentFrequencyUpdate> updates = entry.getValue();
 
+            final String routingKey = collectionName + "." + fieldName;
+
             for (DocumentFrequencyUpdate update : updates) {
                 try {
-                    channel.basicPublish(exchangeName, collectionName /* routingKey */, null /* props */, update.serialize().getBytes());
+                    channel.basicPublish(exchangeName, routingKey, null /* props */, update.serialize().getBytes());
                     ++successfulUpdates;
                 } catch (IOException e) {
                     ++failedUpdates;
