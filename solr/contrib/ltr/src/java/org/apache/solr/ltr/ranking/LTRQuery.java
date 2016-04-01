@@ -34,7 +34,6 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.solr.handler.component.MergeStrategy;
 import org.apache.solr.handler.component.QueryElevationComponent;
 import org.apache.solr.request.SolrRequestInfo;
-import org.apache.solr.search.QueryCommand;
 import org.apache.solr.search.RankQuery;
 import org.apache.solr.search.SolrIndexSearcher;
 
@@ -85,7 +84,7 @@ public class LTRQuery extends RankQuery {
 
   @SuppressWarnings({"rawtypes", "unchecked"})
   @Override
-  public TopDocsCollector getTopDocsCollector(int len, QueryCommand cmd,
+  public TopDocsCollector getTopDocsCollector(int len, SolrIndexSearcher.QueryCommand cmd,
       IndexSearcher searcher) throws IOException {
 
     if (this.boostedPriority == null) {

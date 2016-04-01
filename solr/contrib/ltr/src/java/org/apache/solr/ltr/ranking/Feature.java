@@ -54,7 +54,7 @@ public abstract class Feature extends Query implements Cloneable {
 
     try {
       return (Query) super.clone();
-    } catch (CloneNotSupportedException e) {
+    } catch (Exception e) {
       // FIXME throw the exception, wrap into another exception?
       e.printStackTrace();
     }

@@ -34,10 +34,16 @@ import org.apache.solr.ltr.log.FeatureLogger;
 import org.apache.solr.ltr.ranking.LTRQParserPlugin.LTRQParser;
 import org.apache.solr.ltr.ranking.ModelQuery.ModelWeight;
 import org.apache.solr.request.SolrQueryRequest;
-import org.apache.solr.response.ResultContext;
+import org.apache.solr.response.transform.TransformContext;
 import org.apache.solr.response.transform.DocTransformer;
 import org.apache.solr.response.transform.TransformerFactory;
 import org.apache.solr.search.SolrIndexSearcher;
+
+//import org.slf4j.Logger;
+//import org.slf4j.LoggerFactory;
+//import org.apache.solr.core.SolrCore;
+
+//import org.apache.log4j.Logger;
 
 /**
  * This transformer will take care to generate and append in the response the
@@ -85,7 +91,10 @@ public class LTRFeatureLoggerTransformerFactory extends TransformerFactory {
     }
 
     @Override
-    public void setContext(ResultContext context) {
+    public void setContext(TransformContext context) {
+
+      System.out.println("set context is called with" + context.toString());
+
       super.setContext(context);
       if (context == null) return;
       if (context.getRequest() == null) return;
@@ -117,7 +126,7 @@ public class LTRFeatureLoggerTransformerFactory extends TransformerFactory {
     }
 
     @Override
-    public void transform(SolrDocument doc, int docid, float score)
+    public void transform(SolrDocument doc, int docid)
         throws IOException {
       Object fv = featurelLogger.getFeatureVector(docid, reRankModel, searcher);
       if (fv == null) { // FV for this document was not in the cache

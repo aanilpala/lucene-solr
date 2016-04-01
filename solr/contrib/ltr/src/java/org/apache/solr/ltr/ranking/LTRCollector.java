@@ -36,7 +36,6 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.handler.component.QueryElevationComponent;
 import org.apache.solr.request.SolrRequestInfo;
-import org.apache.solr.search.QueryCommand;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,7 +56,7 @@ public class LTRCollector extends TopDocsCollector {
   private Map<BytesRef,Integer> boostedPriority;
 
   @SuppressWarnings("unchecked")
-  public LTRCollector(int reRankDocs, ModelQuery reRankModel, QueryCommand cmd,
+  public LTRCollector(int reRankDocs, ModelQuery reRankModel, SolrIndexSearcher.QueryCommand cmd,
       IndexSearcher searcher, Map<BytesRef,Integer> boostedPriority)
       throws IOException {
     super(null);
